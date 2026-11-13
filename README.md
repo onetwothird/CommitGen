@@ -93,14 +93,8 @@ New to CommitGen? Follow these steps once and you're set.
 
 | Tool | Why | Get it |
 |---|---|---|
-<<<<<<< HEAD
-| **Git** | commitgen reads your staged changes | [git-scm.com](https://git-scm.com/downloads) |
-| **Go 1.22+** | to install commitgen | [go.dev/dl](https://go.dev/dl/) |
-=======
 | **Git** | CommitGen reads your staged changes | [git-scm.com](https://git-scm.com/downloads) |
 | **Go 1.22+** | to install CommitGen | [go.dev/dl](https://go.dev/dl/) |
-| **Ollama** | runs the AI model locally (skip if you use a cloud API) | [ollama.com/download](https://ollama.com/download) |
->>>>>>> 863efd0b9a26f57a8974e668bb35a9a3bf50d145
 
 Restart your terminal afterwards, then check:
 
@@ -109,13 +103,9 @@ git --version
 go version
 ```
 
-<<<<<<< HEAD
 You also need an AI model to write the messages. You'll choose one in step 3. It can run on your machine (free, private) or in the cloud (nothing to install).
 
-### 2. Install commitgen
-=======
 ### 2. Install CommitGen
->>>>>>> 863efd0b9a26f57a8974e668bb35a9a3bf50d145
 
 ```bash
 go install github.com/onetwothird/CommitGen@latest
@@ -128,7 +118,6 @@ CommitGen version
 
 Pick **one** option. Not sure? Use **A** if your computer has 8 GB+ of RAM. Otherwise use **B**.
 
-<<<<<<< HEAD
 | | A. Local (Ollama) | B. Cloud (Groq, free tier) |
 |---|---|---|
 | **Cost** | Free | Free tier, no card needed |
@@ -159,12 +148,12 @@ Pick **one** option. Not sure? Use **A** if your computer has 8 GB+ of RAM. Othe
    setx COMMITGEN_MODEL "qwen2.5-coder:3b"
    ```
 
-Keep the Ollama app running in the background. No further setup is needed: commitgen talks to Ollama by default.
+Keep the Ollama app running in the background. No further setup is needed: CommitGen talks to Ollama by default.
 
 #### Option B: Cloud with Groq (no install)
 
 1. Create a free API key at [console.groq.com/keys](https://console.groq.com/keys).
-2. Point commitgen at Groq:
+2. Point CommitGen at Groq:
 
    ```bash
    # macOS / Linux (add to ~/.bashrc or ~/.zshrc to keep it)
@@ -180,7 +169,7 @@ Keep the Ollama app running in the background. No further setup is needed: commi
    setx COMMITGEN_API_KEY "gsk_your_key_here"
    ```
 
-3. **Windows: close the terminal and open a new one.** `setx` saves the settings for terminals opened *after* it runs. The window where you ran it does not get them. **In VS Code's built-in terminal, a new terminal tab is not enough: quit VS Code completely and reopen it.** If you run commitgen there, it falls back to the local Ollama default and fails with `could not reach http://localhost:11434`. You can also skip the restart by setting the values for the current window:
+3. **Windows: close the terminal and open a new one.** `setx` saves the settings for terminals opened *after* it runs. The window where you ran it does not get them. **In VS Code's built-in terminal, a new terminal tab is not enough: quit VS Code completely and reopen it.** If you run CommitGen there, it falls back to the local Ollama default and fails with `could not reach http://localhost:11434`. You can also skip the restart by setting the values for the current window:
 
    ```powershell
    $env:COMMITGEN_BASE_URL = "https://api.groq.com/openai/v1"
@@ -188,16 +177,13 @@ Keep the Ollama app running in the background. No further setup is needed: commi
    $env:COMMITGEN_API_KEY  = "gsk_your_key_here"
    ```
 
-4. Confirm commitgen picked them up: `commitgen config show` should list the Groq URL and model, not `localhost:11434`.
+4. Confirm CommitGen picked them up: `CommitGen config show` should list the Groq URL and model, not `localhost:11434`.
 
 > **Keep your key secret.** Never paste your real `gsk_...` key into issues, chats, screenshots, or commits. If it leaks, delete it at [console.groq.com/keys](https://console.groq.com/keys) and create a new one.
 
-You can put these settings in a config file instead: run `commitgen config init`, then edit the file at the path that `commitgen config path` prints. You can also use OpenAI, Anthropic, OpenRouter, or LM Studio. See [Providers](#providers).
+You can put these settings in a config file instead: run `CommitGen config init`, then edit the file at the path that `CommitGen config path` prints. You can also use OpenAI, Anthropic, OpenRouter, or LM Studio. See [Providers](#providers).
 
-Check your setup any time with `commitgen config show`.
-=======
-Keep the Ollama app running in the background. On a low-memory machine, use `qwen2.5-coder:3b` and run CommitGen with `--model qwen2.5-coder:3b`.
->>>>>>> 863efd0b9a26f57a8974e668bb35a9a3bf50d145
+Check your setup any time with `CommitGen config show`.
 
 ### 4. Write your first commit message
 
@@ -400,7 +386,7 @@ This happens with small local models on large diffs. CommitGen detects it and as
 CommitGen is using the local Ollama default. Either:
 
 - **You want Ollama:** Ollama isn't running. Start the Ollama app or run `ollama serve`.
-- **You set up Groq or another cloud provider:** your settings haven't reached this terminal. On Windows, `setx` only affects terminals opened *after* you ran it. Close the terminal, open a new one, and run `commitgen config show` to confirm the base URL is no longer `localhost:11434`. Your staged files remain staged, so you can rerun CommitGen right away.
+- **You set up Groq or another cloud provider:** your settings haven't reached this terminal. On Windows, `setx` only affects terminals opened *after* you ran it. Close the terminal, open a new one, and run `CommitGen config show` to confirm the base URL is no longer `localhost:11434`. Your staged files remain staged, so you can rerun CommitGen right away.
 </details>
 
 <details>
