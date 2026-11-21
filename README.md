@@ -14,7 +14,9 @@
 [Providers](#choosing-a-provider) •
 [Usage](#usage) •
 [Configuration](#configuration) •
+[Beyond commits](#beyond-commit-messages) •
 [Troubleshooting](#troubleshooting) •
+[Security](SECURITY.md) •
 [Contributing](CONTRIBUTING.md)
 
 </div>
@@ -38,7 +40,9 @@ $ CommitGen
 - **Works for everyone.** No GPU, no API key and no internet? CommitGen still writes a Conventional Commit from your diff with its built-in **offline mode**. Add a **free** AI provider in about a minute when you want better messages.
 - **Never stuck on one provider.** Free tiers run out. CommitGen moves to the next provider in your **fallback chain** when it hits a rate limit, a quota, a bad key or a network error, and it ends with offline mode, so you always get a message.
 - **Light.** One small static binary with no runtime and no dependencies. It runs on old laptops, CI machines and WSL.
-- **Safe.** It reads only staged changes and masks API keys, tokens and passwords before anything is sent. `--dry-run` shows exactly what would be sent.
+- **Safe.** It reads only staged changes and masks API keys, tokens and passwords before anything is sent. If you're about to commit a real-looking key, it warns you and automatic commits stop. `--dry-run` shows exactly what would be sent.
+- **Saves your quota.** A message made for a diff is reused if you ask again (the hook after a preview, a commit you aborted), so the same change never costs two API calls.
+- **More than commits.** Pull request descriptions (`CommitGen pr`), release notes (`CommitGen changelog`) and fixing bad messages before you push (`CommitGen reword`).
 
 ## Quick start
 
@@ -59,7 +63,28 @@ irm https://raw.githubusercontent.com/onetwothird/CommitGen/main/install.ps1 | i
 go install github.com/onetwothird/CommitGen@latest
 ```
 
-> `go install` names the binary `CommitGen`. On Windows `CommitGen` works too. On macOS and Linux, type `CommitGen`, or add `alias CommitGen=CommitGen` to your shell profile.
+> `go install` names the binary `CommitGen`, the same name the installers use.
+
+<details>
+<summary><b>Package managers and Docker</b> (from the next release)</summary>
+
+```powershell
+# Windows: Scoop or winget
+scoop bucket add onetwothird https://github.com/onetwothird/scoop-bucket
+scoop install CommitGen
+winget install onetwothird.CommitGen
+```
+
+```bash
+# macOS / Linux: Homebrew (installs tab completion too).
+# Homebrew and Docker only allow lowercase names; the command is still CommitGen.
+brew install onetwothird/tap/commitgen
+
+# Docker: nothing to install but Docker
+docker build -t commitgen https://github.com/onetwothird/CommitGen.git
+docker run --rm -v "$PWD:/repo" commitgen -p --offline
+```
+</details>
 
 **2. Use it.** Inside any git repository:
 
@@ -148,8 +173,12 @@ How failures are handled:
 CommitGen [flags]              generate a message for the staged changes
 CommitGen setup [provider]     guided setup (key, model, test, fallback)
 CommitGen providers            list providers, costs and which keys are set
+CommitGen pr [--base main] [--create]     pull request title and description
+CommitGen changelog [--from] [--to] [--release] [--full]
+CommitGen reword [N] [-y] [--full] [--force]
 CommitGen hook install|uninstall
 CommitGen config init|path|show
+CommitGen cache clear|path
 CommitGen completion bash|zsh|fish|powershell
 CommitGen version
 ```
@@ -172,7 +201,15 @@ CommitGen version
 | `--max <chars>` | Max diff characters sent (fewer = fewer tokens used) |
 | `--dry-run` | Show exactly what would be sent, then exit |
 | `--no-redact` | Disable secret masking |
+| `--no-cache` | Don't reuse a message made earlier for the same diff |
+| `--allow-secrets` | Let `-c -y` and `--each` commit even if the diff has a real-looking key (for fake test keys) |
 | `-v` | Verbose: show the provider chain and diff size |
+| `--base <branch>` | `pr`: branch the pull request goes into (default: origin's default branch) |
+| `--create` | `pr`: open the pull request with the [GitHub CLI](https://cli.github.com) |
+| `--from`, `--to` | `changelog`: range of commits (default: latest tag to `HEAD`) |
+| `--release <name>` | `changelog`: heading, e.g. `v1.2.0` (default: the tag at `--to`, else Unreleased) |
+| `--full` | `changelog`: list every type; `reword`: also rewrite messages that already look fine |
+| `--force` | `reword`: allow rewriting commits that are already pushed |
 
 ### Examples
 
@@ -197,6 +234,7 @@ Offline mode reads the diff and decides:
 - **Type:** `docs` (Markdown, `docs/`), `test` (`*_test.go`, `*.spec.ts`, `tests/` …), `ci` (`.github/workflows`, GitLab CI …), `build` (`go.mod`, `package.json`, `Dockerfile` …), `chore` (config files), `style` (whitespace-only), `feat` (new files or functions), `fix` (small or fix-related edits), `refactor` (removals, renames, larger rewrites). A `-m` hint like "fix …" or "add …" overrides it.
 - **Scope:** the most specific shared folder, skipping generic ones like `src/` and `internal/`, and limited to your `scopes` list if you set one.
 - **Summary and body:** new functions, classes and types are named. It recognizes Go, Python, JavaScript/TypeScript, PHP, Java, C#, Kotlin, Swift, Rust, Ruby, Elixir, C/C++, Dart, Lua and shell. The body lists each file with its `+/-` line counts.
+- **Breaking changes:** removing an exported Go function or type, or changing its signature, adds `!` and a `BREAKING CHANGE:` footer. The same goes for Rust `pub` items. Code in `internal/`, `cmd/`, `main` packages and tests is skipped. Turn this off with `breaking = false`.
 
 It can't know *why* you made a change, so add `-m "why"` or switch on AI for richer messages.
 
@@ -225,6 +263,84 @@ CommitGen completion fish > ~/.config/fish/completions/CommitGen.fish
 ```
 
 The scripts are also in [`completions/`](completions) and in every release archive, if you'd rather install them as files.
+
+## Beyond commit messages
+
+### Pull request descriptions
+
+```console
+$ CommitGen pr
+feat(client): add timeout parameter to Dial
+
+## Summary
+Dial now accepts a timeout, so callers can stop waiting on slow servers.
+
+## Changes
+- client/client.go: Dial(addr, timeout) ...
+
+## Testing
+...
+```
+
+It reads every commit and the full diff since the branch left `main`. `--create` opens the pull request with `gh pr create`, and `--base develop` picks another target branch.
+
+### Release notes
+
+```bash
+CommitGen changelog                       # since the latest tag, grouped by type
+CommitGen changelog --release v1.2.0      # heading "## [v1.2.0] - <date>"
+CommitGen changelog --from v1.0.0 --full  # include refactors, docs, tests and chores
+```
+
+Breaking changes (`feat!:` or a `BREAKING CHANGE:` footer) get their own section at the top. No AI is needed, because Conventional Commits already say what each change is. Right after tagging, `CommitGen changelog` shows that release.
+
+### Fix bad messages before you push
+
+```console
+$ CommitGen reword
+  3f2a91c  feat(cache): reuse messages  (kept)
+  8b1d0e4  wip
+     -> fix(git): handle detached HEAD in Branch
+  c71e5a2  update
+     -> docs(readme): document the cache
+
+rewrite 2 commit message(s)? [y]es [n]o (n):
+```
+
+With no number, it looks at the commits you haven't pushed yet; `CommitGen reword 5` looks at the last five. Good messages are kept unless you pass `--full`. Only the messages change: your files, author and dates stay the same, and `git reset --soft ORIG_HEAD` undoes it. Pushed commits are left alone unless you pass `--force`.
+
+### In GitHub Actions
+
+Write release notes when you push a tag:
+
+```yaml
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # the changelog needs the tags
+      - id: notes
+        uses: onetwothird/CommitGen@main
+        with:
+          command: changelog        # or: pr
+      - run: gh release create "$GITHUB_REF_NAME" --notes-file "${{ steps.notes.outputs.file }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+```
+
+The default `provider: offline` needs no key. For AI-written pull request text, set `provider: groq` (or another) and pass the key as an env var.
+
+### Team rules: commitlint and issue links
+
+- **commitlint:** if the repo has a commitlint config (`.commitlintrc*`, `commitlint.config.*` or a `commitlint` key in `package.json`), CommitGen follows its `type-enum`, `scope-enum` and `header-max-length` rules and asks the model to fix any message that breaks them. JavaScript configs are read, not run.
+- **Issue links:** on a branch like `fix/123-login` or `feature/PROJ-42-search`, messages get a `Refs #123` / `Refs PROJ-42` footer, unless the message already mentions it. Use `issue_footer = "Closes"` to close the issue on merge, or `issue_footer = ""` to turn this off.
 
 ## Get the most out of CommitGen
 
@@ -297,6 +413,9 @@ instructions = "Reference the Jira ticket from the branch name, e.g. PROJ-123."
 | `exclude` | — | Extra pathspecs left out of the diff (lockfiles, `dist/` and images are already skipped) |
 | `scopes` | — | Allowed Conventional Commit scopes |
 | `instructions` | — | Extra rules for the model |
+| `cache` | `true` | Reuse the message for a diff you already generated (saved for 7 days in `CommitGen cache path`) |
+| `issue_footer` | `Refs` | Footer for the branch's issue (`fix/123-x` → `Refs #123`); `Closes`, or `""` to turn off |
+| `breaking` | `true` | Offline mode: mark removed or changed exported Go/Rust API as a breaking change |
 
 ### Environment variables
 
@@ -339,6 +458,9 @@ On Windows, `setx` only affects terminals opened **after** it runs. In VS Code, 
 | `could not connect — is the local model server running?` | Start Ollama (`ollama serve`) or LM Studio's server, or use a hosted provider. |
 | `not found — check base_url and the model name` | Wrong model name. For Ollama: `ollama pull <model>`. For hosted providers, check their model list. |
 | The model describes the diff instead of writing a message | CommitGen retries automatically. Also try staging less at once, adding `-m "..."`, or a larger model. |
+| `not committing: the changes contain what looks like a real API key` | Remove the key from the staged files (use an environment variable instead). If it's a fake key in a test, pass `--allow-secrets`. |
+| `reused the message made earlier for this exact diff` | That's the cache saving an API call. Press `r` to regenerate, or use `--no-cache`. |
+| `the message breaks this repo's commitlint rules` | The model couldn't satisfy `type-enum` / `header-max-length`; edit the message, or use `-m` to steer it. |
 | Settings don't seem to apply | Run `CommitGen config show` to see the effective provider chain. On Windows, open a new terminal after `setx`. |
 | Old setup with `COMMITGEN_BASE_URL` | Still works: the URL is matched to its provider (Groq, OpenAI, …) or treated as a custom server. |
 
@@ -347,24 +469,24 @@ The git hook never blocks a commit: if generation fails, `git commit` continues 
 ## How it works
 
 ```text
-git diff --cached → skip noise → mask secrets → build prompt → provider chain → clean up → git commit
-                                                                     │
-                                       groq → gemini → … → ollama → offline
+git diff --cached → skip noise → scan + mask secrets → build prompt → cache? → provider chain → clean up → git commit
+                                                                               │
+                                                 groq → gemini → … → ollama → offline
 ```
 
 1. Reads **staged** changes only. Lockfiles, minified assets, build output and images are skipped, and big diffs are trimmed while keeping every file header.
-2. Masks anything that looks like a secret.
+2. Warns about anything that looks like a secret (and stops automatic commits of real-looking keys), then masks it.
 3. Adds the file summary, branch name and recent commit subjects so the message matches your repo's style.
-4. Tries each provider in the chain until one answers.
-5. Cleans the reply (code fences, quotes, preambles, `<think>` blocks). If it isn't a valid commit message, asks the model to fix it.
-6. Hands the message to `git commit`.
+4. Reuses the saved message if this exact request was answered before; otherwise tries each provider in the chain until one answers.
+5. Cleans the reply (code fences, quotes, preambles, `<think>` blocks). If it isn't a valid commit message, or breaks the repo's commitlint rules, asks the model to fix it.
+6. Adds the branch's issue footer and hands the message to `git commit`.
 
 ## FAQ
 
 <details>
 <summary><b>Does my code leave my machine?</b></summary>
 
-Only if you use a hosted provider, and then only the filtered, secret-masked staged diff goes to that provider. `offline`, `ollama`, `lmstudio` and `llamacpp` keep everything local. Run `CommitGen --dry-run` to see exactly what would be sent.
+Only if you use a hosted provider, and then only the filtered, secret-masked staged diff goes to that provider. `offline`, `ollama`, `lmstudio` and `llamacpp` keep everything local. Run `CommitGen --dry-run` to see exactly what would be sent. The local cache stores generated messages only, never your code. See [SECURITY.md](SECURITY.md) for details and how to report a vulnerability.
 </details>
 
 <details>
@@ -393,20 +515,27 @@ go build -o CommitGen .
 
 ```text
 .
-├── main.go            CLI entry point and commands
+├── main.go            CLI entry point, commit flow, hook, config
+├── history.go         `pr`, `changelog`, `reword` and `cache` commands
 ├── providers.go       provider resolution, fallback chain, friendly errors
 ├── setup.go           `CommitGen setup` wizard
 ├── completion.go      `CommitGen completion` (embeds the scripts below)
 ├── completions/       Bash, Zsh, Fish and PowerShell tab completion
+├── action.yml         GitHub Action (changelog / pr in CI)
+├── Dockerfile         container image
 ├── install.sh         installer for macOS / Linux
 ├── install.ps1        installer for Windows
 └── internal/
+    ├── cache/         saved messages for diffs already generated
+    ├── changelog/     release notes from Conventional Commits
+    ├── commitlint/    reads a repo's commitlint rules
     ├── config/        config files and env vars
-    ├── git/           git commands (diff, log, branch)
-    ├── heuristic/     offline (no-AI) message generator
+    ├── git/           git commands (diff, log, history rewriting)
+    ├── heuristic/     offline (no-AI) message generator, breaking-change detection
     ├── llm/           provider presets, clients, errors, fallback chain
-    ├── prompt/        prompt building and output cleanup
-    └── redact/        secret masking
+    ├── prompt/        prompts for commits and pull requests, output cleanup
+    ├── redact/        secret scanning and masking
+    └── refs/          issue references from branch names
 ```
 
 Adding a provider that speaks the OpenAI API is usually one entry in [`internal/llm/presets.go`](internal/llm/presets.go). See [CONTRIBUTING.md](CONTRIBUTING.md).
