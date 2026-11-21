@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -124,12 +125,22 @@ func httpError(resp *http.Response, base string) error {
 		e.Kind = ErrRateLimit
 	}
 	if ra := resp.Header.Get("Retry-After"); ra != "" {
-		if secs, err := strconv.Atoi(ra); err == nil {
-			e.RetryAfter = time.Duration(secs) * time.Second
+		if secs, err := strconv.ParseFloat(ra, 64); err == nil {
+			e.RetryAfter = time.Duration(secs * float64(time.Second))
+		}
+	}
+	// Groq and others put the exact wait in the message, e.g.
+	// "Please try again in 7.5s" or "... in 12m30.2s"; it's more precise than
+	// the rounded header.
+	if m := tryAgainRe.FindStringSubmatch(e.Detail); m != nil {
+		if d, err := time.ParseDuration(m[1]); err == nil && d > 0 {
+			e.RetryAfter = d
 		}
 	}
 	return e
 }
+
+var tryAgainRe = regexp.MustCompile(`(?i)try again in ((?:\d+(?:\.\d+)?(?:h|ms|m|s))+)`)
 
 func connError(err error, base string) error {
 	if errors.Is(err, context.Canceled) {

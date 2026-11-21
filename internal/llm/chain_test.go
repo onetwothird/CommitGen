@@ -174,3 +174,95 @@ func TestReasoningModelsGetRoom(t *testing.T) {
 		t.Errorf("payload = %s", got)
 	}
 }
+
+// seq returns errors from errs in order, then out forever.
+type seq struct {
+	errs  []error
+	out   string
+	calls int
+}
+
+func (s *seq) Generate(context.Context, Request, OnToken) (string, error) {
+	s.calls++
+	if s.calls <= len(s.errs) {
+		return "", s.errs[s.calls-1]
+	}
+	return s.out, nil
+}
+
+func rl(d time.Duration) error { return &Error{Kind: ErrRateLimit, Base: "groq", RetryAfter: d} }
+
+func TestChainWaitsOutShortLimitWhenOnlyOfflineIsLeft(t *testing.T) {
+	g := &seq{errs: []error{rl(7500 * time.Millisecond)}, out: "feat: ai"}
+	var slept time.Duration
+	c := &Chain{Links: []Link{{Name: "groq", Provider: g}, {Name: "offline", Provider: Offline{}}},
+		Sleep: func(_ context.Context, d time.Duration) error { slept += d; return nil }}
+	got, err := c.Generate(context.Background(), Request{}, nil)
+	if err != nil || got != "feat: ai" || g.calls != 2 {
+		t.Fatalf("got %q, %v, calls=%d", got, err, g.calls)
+	}
+	if slept < 7500*time.Millisecond || slept > 9*time.Second {
+		t.Errorf("slept %s", slept)
+	}
+}
+
+func TestChainDoesNotWaitWhenAnotherAIIsAvailable(t *testing.T) {
+	g := &seq{errs: []error{rl(5 * time.Second)}, out: "feat: groq"}
+	gem := &fake{out: "feat: gemini"}
+	c := &Chain{Links: []Link{{Name: "groq", Provider: g}, {Name: "gemini", Provider: gem}, {Name: "offline", Provider: Offline{}}},
+		Sleep: func(context.Context, time.Duration) error { t.Fatal("should not sleep"); return nil }}
+	if got, _ := c.Generate(context.Background(), Request{}, nil); got != "feat: gemini" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestChainLongLimitFallsBackThenRecovers(t *testing.T) {
+	now := time.Unix(0, 0)
+	diff := "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-a\n+b\n"
+	g := &seq{errs: []error{rl(12 * time.Minute)}, out: "feat: ai"}
+	c := &Chain{Links: []Link{{Name: "groq", Provider: g}, {Name: "offline", Provider: Offline{}}},
+		Now:   func() time.Time { return now },
+		Sleep: func(context.Context, time.Duration) error { t.Fatal("should not sleep 12m"); return nil }}
+
+	got, _ := c.Generate(context.Background(), Request{Diff: diff}, nil)
+	if c.Used() != "offline" || g.calls != 1 {
+		t.Fatalf("first: %q used=%s calls=%d", got, c.Used(), g.calls)
+	}
+	// still cooling down: groq is not called again
+	c.Generate(context.Background(), Request{Diff: diff}, nil)
+	if g.calls != 1 {
+		t.Errorf("groq called during cooldown")
+	}
+	// after the reset time groq is used again (this is what --each needs)
+	now = now.Add(13 * time.Minute)
+	if got, _ := c.Generate(context.Background(), Request{Diff: diff}, nil); got != "feat: ai" || c.Used() != "groq" {
+		t.Errorf("after cooldown: %q used=%s", got, c.Used())
+	}
+}
+
+func TestChainDisablesBadKey(t *testing.T) {
+	bad := &fake{err: &Error{Kind: ErrAuth}}
+	ok := &fake{out: "fix: x"}
+	c := &Chain{Links: []Link{{Name: "groq", Provider: bad}, {Name: "gemini", Provider: ok}}, Now: func() time.Time { return time.Unix(1e9, 0) }}
+	for i := 0; i < 3; i++ {
+		c.Generate(context.Background(), Request{}, nil)
+	}
+	if bad.calls.Load() != 1 || ok.calls.Load() != 3 {
+		t.Errorf("bad=%d ok=%d", bad.calls.Load(), ok.calls.Load())
+	}
+}
+
+func TestRetryAfterFromBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "8")
+		w.WriteHeader(429)
+		fmt.Fprint(w, `{"error":{"message":"Rate limit reached on tokens per minute (TPM): Limit 8000, Used 7900. Please try again in 1m7.5s.","code":"rate_limit_exceeded"}}`)
+	}))
+	defer srv.Close()
+	p, _ := New(Options{BaseURL: srv.URL, Timeout: 5 * time.Second})
+	_, err := p.Generate(context.Background(), Request{}, nil)
+	var e *Error
+	if !errors.As(err, &e) || e.RetryAfter != 67500*time.Millisecond {
+		t.Errorf("RetryAfter = %v (%v)", e.RetryAfter, err)
+	}
+}
