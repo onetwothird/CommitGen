@@ -18,6 +18,9 @@ jobs:
       - name: gofmt
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: govulncheck (known vulnerabilities in Go and the standard library)
+        if: runner.os == 'Linux'
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: completion scripts (bash, fish)
         if: runner.os == 'Linux'
         run: |
@@ -34,3 +37,23 @@ jobs:
           $tokens = $null; $errs = $null
           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/completions/CommitGen.ps1", [ref]$tokens, [ref]$errs)
           if ($errs) { $errs; exit 1 }
+
+  action:
+    # Runs this repository's own GitHub Action, the way users would.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: notes
+        uses: ./
+        with:
+          command: changelog
+      - run: test -n "${{ steps.notes.outputs.text }}"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t commitgen .
+      - run: docker run --rm commitgen version
