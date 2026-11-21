@@ -25,6 +25,7 @@ type File struct {
 	NewSymbols     []string
 	addedText      []string
 	removedText    []string
+	mainPkg        bool // the diff shows "package main" (Go)
 }
 
 func Parse(diff string) []File {
@@ -51,11 +52,19 @@ func Parse(diff string) []File {
 			cur.Binary = true
 		case strings.HasPrefix(line, "+++ "), strings.HasPrefix(line, "--- "):
 		case strings.HasPrefix(line, "+"):
+			if line == "+package main" {
+				cur.mainPkg = true
+			}
 			cur.Added++
 			cur.addedText = append(cur.addedText, line[1:])
 		case strings.HasPrefix(line, "-"):
+			if line == "-package main" {
+				cur.mainPkg = true
+			}
 			cur.Removed++
 			cur.removedText = append(cur.removedText, line[1:])
+		case line == " package main":
+			cur.mainPkg = true
 		}
 	}
 	for i := range files {
@@ -189,9 +198,11 @@ func classify(p string) category {
 }
 
 type Options struct {
-	Style  string   // "conventional" (default) or "simple"
-	Scopes []string // allowed scopes; empty = any
-	Hint   string   // user's -m text; used as the summary when given
+	Style      string   // "conventional" (default) or "simple"
+	Scopes     []string // allowed scopes; empty = any
+	Hint       string   // user's -m text; used as the summary when given
+	NoBreaking bool     // don't mark removed/changed public API as a breaking change
+	MaxSubject int      // max subject length; 0 = 72
 }
 
 func Generate(diff string, o Options) string {
@@ -199,12 +210,31 @@ func Generate(diff string, o Options) string {
 	if len(files) == 0 {
 		return ""
 	}
+	maxSubj := o.MaxSubject
+	if maxSubj <= 0 || maxSubj > 72 {
+		maxSubj = 72
+	}
+	var breaks []string
+	if !o.NoBreaking {
+		breaks = Breaking(files)
+	}
+	footer := ""
+	if len(breaks) > 0 {
+		footer = limit("BREAKING CHANGE: "+strings.Join(breaks, "; "), 200)
+	}
+	join := func(parts ...string) string {
+		var out []string
+		for _, p := range parts {
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return strings.Join(out, "\n\n")
+	}
+
 	if h := strings.TrimSpace(o.Hint); o.Style != "simple" && conventionalRe.MatchString(h) {
 		// The user already wrote a conventional subject; keep it and add the file list.
-		if body := bodyFor(files, o.Style); body != "" {
-			return limit(h, 72) + "\n\n" + body
-		}
-		return limit(h, 72)
+		return join(limit(h, maxSubj), bodyFor(files, o.Style), footer)
 	}
 	typ := commitType(files, o.Hint)
 	// Name and scope the commit after the code it changes; docs, tests and
@@ -230,15 +260,109 @@ func Generate(diff string, o Options) string {
 		if scope != "" {
 			subj += "(" + scope + ")"
 		}
+		if footer != "" {
+			subj += "!"
+		}
 		subj += ": " + summary
 	}
-	subj = limit(subj, 72)
+	subj = limit(subj, maxSubj)
 
-	body := bodyFor(files, o.Style)
-	if body == "" {
-		return subj
+	return join(subj, bodyFor(files, o.Style), footer)
+}
+
+// Public API declarations whose removal or signature change breaks callers.
+// Only languages where "exported" really means public are covered: Go
+// (capitalised names outside internal/, cmd/ and package main) and Rust (pub).
+var (
+	goFuncRe = regexp.MustCompile(`^func\s+(?:\(\s*(?:\w+\s+)?\*?\s*(\w+)(?:\[[^\]]*\])?\s*\)\s*)?([A-Z]\w*)\s*[\[(]`)
+	goTypeRe = regexp.MustCompile(`^type\s+([A-Z]\w*)\b`)
+	rustRe   = regexp.MustCompile(`^pub\s+(?:async\s+)?(?:fn|struct|enum|trait|type|const)\s+(\w+)`)
+	spaceRe  = regexp.MustCompile(`\s+`)
+)
+
+func publicAPI(f File) bool {
+	p := "/" + f.Path
+	switch path.Ext(f.Path) {
+	case ".go":
+		return !f.mainPkg && !strings.HasSuffix(p, "_test.go") && path.Base(p) != "main.go" &&
+			!strings.Contains(p, "/internal/") && !strings.Contains(p, "/cmd/") &&
+			!strings.Contains(p, "/testdata/") && !strings.Contains(p, "/examples/")
+	case ".rs":
+		return !strings.HasSuffix(p, "/main.rs") && !strings.Contains(p, "/bin/") &&
+			!strings.Contains(p, "/tests/") && !strings.Contains(p, "/examples/")
 	}
-	return subj + "\n\n" + body
+	return false
+}
+
+// apiDecl returns the name of a public declaration on line, and its
+// signature with whitespace normalised.
+func apiDecl(ext, line string) (name, sig string) {
+	t := strings.TrimSpace(line)
+	switch ext {
+	case ".go":
+		if m := goFuncRe.FindStringSubmatch(t); m != nil {
+			if m[1] != "" && !isUpper(m[1]) {
+				return "", "" // exported method on an unexported type
+			}
+			name = m[2]
+			if m[1] != "" {
+				name = m[1] + "." + m[2]
+			}
+		} else if m := goTypeRe.FindStringSubmatch(t); m != nil {
+			name = m[1]
+		}
+	case ".rs":
+		if m := rustRe.FindStringSubmatch(t); m != nil {
+			name = m[1]
+		}
+	}
+	if name == "" {
+		return "", ""
+	}
+	sig = strings.TrimSpace(strings.TrimSuffix(spaceRe.ReplaceAllString(t, " "), "{"))
+	return name, sig
+}
+
+func isUpper(s string) bool { return s != "" && s[0] >= 'A' && s[0] <= 'Z' }
+
+// Breaking lists public declarations that the diff removes or whose
+// signature it changes, e.g. "remove Client.Do", "change the signature of New".
+// A declaration that moves to another file unchanged is not breaking.
+func Breaking(files []File) []string {
+	added := map[string]map[string]bool{} // name -> signatures still present
+	for _, f := range files {
+		if !publicAPI(f) {
+			continue
+		}
+		for _, l := range f.addedText {
+			if n, sig := apiDecl(path.Ext(f.Path), l); n != "" {
+				if added[n] == nil {
+					added[n] = map[string]bool{}
+				}
+				added[n][sig] = true
+			}
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		if !publicAPI(f) {
+			continue
+		}
+		for _, l := range f.removedText {
+			n, sig := apiDecl(path.Ext(f.Path), l)
+			if n == "" || seen[n] || added[n][sig] {
+				continue
+			}
+			seen[n] = true
+			if added[n] == nil {
+				out = append(out, "remove "+n)
+			} else {
+				out = append(out, "change the signature of "+n)
+			}
+		}
+	}
+	return out
 }
 
 var hintTypes = []struct {

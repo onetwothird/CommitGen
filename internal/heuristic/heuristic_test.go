@@ -148,3 +148,56 @@ func TestLongSubjectIsTrimmed(t *testing.T) {
 		t.Errorf("subject too long: %d", len(subject(got)))
 	}
 }
+
+func TestBreakingRemovedExportedFunc(t *testing.T) {
+	d := mod("client/client.go", []string{"func Dial(addr string) (*Conn, error) {"}, []string{"func dial(addr string) (*Conn, error) {"})
+	msg := Generate(d, Options{})
+	if !strings.Contains(subject(msg), "!:") || !strings.Contains(msg, "BREAKING CHANGE: remove Dial") {
+		t.Errorf("expected a breaking change, got:\n%s", msg)
+	}
+}
+
+func TestBreakingChangedSignature(t *testing.T) {
+	d := mod("api.go", []string{"func (c *Client) Do(req *Request) error {"}, []string{"func (c *Client) Do(ctx context.Context, req *Request) error {"})
+	if msg := Generate(d, Options{}); !strings.Contains(msg, "BREAKING CHANGE: change the signature of Client.Do") {
+		t.Errorf("got:\n%s", msg)
+	}
+}
+
+func TestNotBreaking(t *testing.T) {
+	cases := map[string]string{
+		"internal package": mod("internal/x/x.go", []string{"func Old() {"}, nil),
+		"main.go":          mod("main.go", []string{"func Run() {"}, nil),
+		"test file":        mod("x_test.go", []string{"func TestOld(t *testing.T) {"}, nil),
+		"unexported":       mod("x.go", []string{"func helper() {"}, nil),
+		"unexported recv":  mod("x.go", []string{"func (s *server) Close() error {"}, nil),
+		"body change only": mod("x.go", []string{"\treturn 1"}, []string{"\treturn 2"}),
+		"moved to another file": mod("a.go", []string{"func New() *T {"}, nil) +
+			newFile("b.go", "func New() *T {"),
+		"package main": "diff --git a/tool.go b/tool.go\n--- a/tool.go\n+++ b/tool.go\n@@ -1,4 +1,3 @@\n package main\n \n-func Export() {}\n",
+		"javascript":   mod("src/index.js", []string{"export function old() {"}, nil),
+	}
+	for name, d := range cases {
+		if msg := Generate(d, Options{}); strings.Contains(msg, "BREAKING") || strings.Contains(subject(msg), "!") {
+			t.Errorf("%s: should not be breaking:\n%s", name, msg)
+		}
+	}
+	d := mod("client.go", []string{"func Dial() {"}, nil)
+	if msg := Generate(d, Options{NoBreaking: true}); strings.Contains(msg, "BREAKING") {
+		t.Error("NoBreaking must turn detection off")
+	}
+}
+
+func TestBreakingRust(t *testing.T) {
+	d := mod("src/lib.rs", []string{"pub fn parse(s: &str) -> Ast {"}, []string{"pub fn parse(s: &str, opts: Opts) -> Ast {"})
+	if msg := Generate(d, Options{}); !strings.Contains(msg, "change the signature of parse") {
+		t.Errorf("got:\n%s", msg)
+	}
+}
+
+func TestMaxSubject(t *testing.T) {
+	d := newFile("internal/payments/stripe_webhook_signature_verification.go", "package payments")
+	if s := subject(Generate(d, Options{MaxSubject: 40})); len(s) > 40 {
+		t.Errorf("subject %q longer than 40", s)
+	}
+}
