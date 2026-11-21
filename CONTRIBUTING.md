@@ -37,6 +37,7 @@ You need Go 1.22 or newer and git. The project has **no third-party dependencies
 
 4. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:` …). CommitGen can write them for you.
 5. Open a pull request describing what changed and why.
+6. [CodeRabbit](https://coderabbit.ai), an AI reviewer, comments on your pull request within a few minutes with a summary and suggestions. Reply to it in the thread, or write `@coderabbitai review` after pushing more commits. A maintainer still does the final review; you don't have to accept every suggestion.
 
 Tests must not depend on your machine: no real API keys, network calls or locally running models. Use `httptest` servers and the helpers already in the test files (for example `clean(t)` in the config tests and `isolate(t, …)` in `providers_test.go`).
 
