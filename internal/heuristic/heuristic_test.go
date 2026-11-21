@@ -7,7 +7,6 @@ import (
 	"github.com/onetwothird/CommitGen/internal/prompt"
 )
 
-// mod builds a diff for a modified file.
 func mod(path string, removed, added []string) string {
 	var b strings.Builder
 	b.WriteString("diff --git a/" + path + " b/" + path + "\nindex 111..222 100644\n--- a/" + path + "\n+++ b/" + path + "\n@@ -1,3 +1,3 @@\n")
