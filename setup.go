@@ -14,7 +14,7 @@ import (
 	"github.com/onetwothird/CommitGen/internal/llm"
 )
 
-// setupChoices is the menu shown by `commitgen setup`, easiest first.
+// setupChoices is the menu shown by `CommitGen setup`, easiest first.
 var setupChoices = []struct{ name, label string }{
 	{"gemini", "Google Gemini     free tier, no card — good quality, generous daily limit"},
 	{"groq", "Groq              free tier, no card — very fast, smaller daily limit"},
@@ -64,14 +64,14 @@ func (p prompter) yes(q string, def bool) bool {
 // setupCmd walks the user through choosing a provider, entering a key,
 // testing it and picking a fallback, then saves the config.
 //
-//	commitgen setup                 interactive menu
-//	commitgen setup gemini          skip the menu
+//	CommitGen setup                 interactive menu
+//	CommitGen setup gemini          skip the menu
 func setupCmd(args []string) error {
 	p := prompter{bufio.NewReader(os.Stdin)}
 	path := config.UserConfigPath()
 	cfg, _ := config.Load("")
 
-	fmt.Println("commitgen setup — choose who writes your commit messages.")
+	fmt.Println("CommitGen setup — choose who writes your commit messages.")
 	fmt.Println("Your answers are saved to", path)
 	fmt.Println()
 
@@ -118,7 +118,7 @@ func setupCmd(args []string) error {
 		fmt.Println()
 		switch {
 		case envKey != "":
-			fmt.Printf("Found your key in $%s — commitgen will use it.\n", envName)
+			fmt.Printf("Found your key in $%s — CommitGen will use it.\n", envName)
 		case existing != "":
 			fmt.Println("A key is already saved in your config.")
 		default:
@@ -176,7 +176,7 @@ func setupCmd(args []string) error {
 			}
 			if err := testProvider(pre, base, cfg.Keys[pre.Name], model, cfg.NumCtx); err != nil {
 				fmt.Println("  ✗ test failed:", friendly(err))
-				fmt.Println("  Settings are still saved; fix the issue above and run `commitgen setup` again.")
+				fmt.Println("  Settings are still saved; fix the issue above and run `CommitGen setup` again.")
 			} else {
 				fmt.Println("  ✓ it works")
 			}
@@ -186,7 +186,7 @@ func setupCmd(args []string) error {
 	// Fallback
 	if pre.Kind != llm.KindOffline {
 		fmt.Println()
-		fmt.Println("When", pre.Name, "is unavailable (rate limit, quota, no internet), commitgen can try others.")
+		fmt.Println("When", pre.Name, "is unavailable (rate limit, quota, no internet), CommitGen can try others.")
 		fmt.Println("Offline mode at the end means you always get a message.")
 		def := "offline"
 		var others []string
@@ -216,9 +216,9 @@ func setupCmd(args []string) error {
 	}
 	fmt.Println()
 	fmt.Println("Saved", path)
-	fmt.Println("All set. Stage some changes and run `commitgen`:")
+	fmt.Println("All set. Stage some changes and run `CommitGen`:")
 	fmt.Println("  git add -A")
-	fmt.Println("  commitgen")
+	fmt.Println("  CommitGen")
 	return nil
 }
 
