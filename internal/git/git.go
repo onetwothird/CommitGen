@@ -15,14 +15,24 @@ var DefaultExcludes = []string{
 	"*.map", "dist/*", "build/*", "vendor/*", "*.svg", "*.png", "*.jpg",
 }
 
-var ErrNothingStaged = errors.New("nothing staged — run `git add` first")
+var (
+	ErrNothingStaged = errors.New("nothing is staged.\n  Stage files with `git add <file>` (or `git add -A` for everything),\n  or run `commitgen -a` to stage all changes and continue")
+	ErrNotRepo       = errors.New("not a git repository")
+	ErrNoGit         = errors.New("git not found")
+)
 
 func run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return "", ErrNoGit
+		}
 		msg := strings.TrimSpace(errb.String())
+		if strings.Contains(msg, "not a git repository") {
+			return "", ErrNotRepo
+		}
 		if msg == "" {
 			msg = err.Error()
 		}
