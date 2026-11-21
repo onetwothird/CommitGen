@@ -400,8 +400,8 @@ const hookScript = `#!/bin/sh
 # Skipped for merges, amends, -m messages, templates, and commitgen's own commits.
 [ -n "$COMMITGEN_SKIP_HOOK" ] && exit 0
 case "$2" in merge|squash|commit|message|template) exit 0 ;; esac
-command -v commitgen >/dev/null 2>&1 || exit 0
-commitgen --hook "$1" </dev/null || true
+cg=$(command -v commitgen || command -v CommitGen) || exit 0
+"$cg" --hook "$1" </dev/null || true
 `
 
 func hookCmd(args []string) error {
