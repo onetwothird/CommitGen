@@ -1,0 +1,48 @@
+name: CommitGen
+description: Release notes and pull request descriptions from your commits, with free AI, local models or offline mode.
+author: onetwothird
+branding:
+  icon: git-commit
+  color: orange
+
+inputs:
+  command:
+    description: "What to generate: changelog (release notes) or pr (pull request title and description)."
+    default: changelog
+  args:
+    description: Extra arguments, e.g. "--release v1.2.0 --full" or "--base main".
+    default: ""
+  provider:
+    description: Provider to use. "offline" needs no key; for AI set its key as an env var (e.g. GROQ_API_KEY).
+    default: offline
+
+outputs:
+  text:
+    description: The generated Markdown.
+  file:
+    description: Path of a file with the same Markdown.
+
+runs:
+  using: composite
+  steps:
+    - name: Build CommitGen
+      shell: bash
+      run: |
+        # GitHub-hosted runners have Go preinstalled; CommitGen has no dependencies.
+        cd "$GITHUB_ACTION_PATH"
+        go build -trimpath -o "$RUNNER_TEMP/CommitGen" .
+    - name: Run CommitGen
+      id: run
+      shell: bash
+      env:
+        CG_COMMAND: ${{ inputs.command }}
+        CG_ARGS: ${{ inputs.args }}
+        CG_PROVIDER: ${{ inputs.provider }}
+      run: |
+        case "$CG_COMMAND" in changelog|pr) ;; *) echo "::error::command must be changelog or pr"; exit 1 ;; esac
+        out="$RUNNER_TEMP/CommitGen-$CG_COMMAND.md"
+        # shellcheck disable=SC2086 # args are meant to be split
+        "$RUNNER_TEMP/CommitGen" "$CG_COMMAND" --provider "$CG_PROVIDER" $CG_ARGS > "$out"
+        cat "$out"
+        delim="CommitGen_$(date +%s%N)"
+        { echo "text<<$delim"; cat "$out"; echo "$delim"; echo "file=$out"; } >> "$GITHUB_OUTPUT"
