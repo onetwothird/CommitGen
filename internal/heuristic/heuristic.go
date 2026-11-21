@@ -1,7 +1,3 @@
-// Package heuristic writes a commit message from a diff without any AI model.
-// It looks at which files changed, how (added / deleted / renamed / modified),
-// how many lines moved, and which functions or types were added, then picks a
-// Conventional Commit type, a scope and a summary.
 package heuristic
 
 import (
@@ -12,7 +8,6 @@ import (
 	"strings"
 )
 
-// Status of a file in the diff.
 type Status int
 
 const (
@@ -22,18 +17,16 @@ const (
 	Renamed
 )
 
-// File is one file's change.
 type File struct {
 	Path, OldPath  string
 	Status         Status
 	Added, Removed int
 	Binary         bool
-	NewSymbols     []string // functions/types/classes introduced by added lines
+	NewSymbols     []string 
 	addedText      []string
 	removedText    []string
 }
 
-// Parse reads a unified git diff.
 func Parse(diff string) []File {
 	var files []File
 	var cur *File
@@ -57,7 +50,6 @@ func Parse(diff string) []File {
 		case strings.HasPrefix(line, "Binary files "):
 			cur.Binary = true
 		case strings.HasPrefix(line, "+++ "), strings.HasPrefix(line, "--- "):
-			// header lines; paths already known
 		case strings.HasPrefix(line, "+"):
 			cur.Added++
 			cur.addedText = append(cur.addedText, line[1:])
@@ -76,7 +68,6 @@ func Parse(diff string) []File {
 	return files
 }
 
-// splitGitPaths splits "a/x b/y" (paths may contain spaces; assume a/ and b/ prefixes).
 func splitGitPaths(s string) (string, string) {
 	if i := strings.Index(s, " b/"); i >= 0 && strings.HasPrefix(s, "a/") {
 		return s[2:i], s[i+3:]
@@ -148,7 +139,6 @@ func symbol(line string) string {
 	return ""
 }
 
-// Category of a path.
 type category int
 
 const (
@@ -198,15 +188,13 @@ func classify(p string) category {
 	return catSource
 }
 
-// Options shape the generated message.
 type Options struct {
 	Style  string   // "conventional" (default) or "simple"
 	Scopes []string // allowed scopes; empty = any
 	Hint   string   // user's -m text; used as the summary when given
 }
 
-// Generate writes a commit message for the diff. It returns "" only if the
-// diff has no files.
+
 func Generate(diff string, o Options) string {
 	files := Parse(diff)
 	if len(files) == 0 {
