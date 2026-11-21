@@ -15,7 +15,7 @@ type Input struct {
 	Language     string
 	Scopes       []string
 	Instructions string
-	Hint         string 
+	Hint         string
 	MaxDiff      int
 }
 
