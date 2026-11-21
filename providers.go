@@ -87,7 +87,7 @@ func resolve(c config.Config) (targets []target, skipped []string) {
 	add := func(name string, main bool) {
 		p, ok := llm.Lookup(name)
 		if !ok {
-			skipped = append(skipped, fmt.Sprintf("%s: unknown provider (see `commitgen providers`)", name))
+			skipped = append(skipped, fmt.Sprintf("%s: unknown provider (see `CommitGen providers`)", name))
 			return
 		}
 		if seen[p.Name] && p.Name != "openai" {
@@ -103,7 +103,7 @@ func resolve(c config.Config) (targets []target, skipped []string) {
 		}
 		custom := main && c.BaseURL != "" && strings.TrimRight(c.BaseURL, "/") != p.BaseURL
 		if p.NeedsKey() && t.key == "" && !custom {
-			skipped = append(skipped, fmt.Sprintf("%s: no API key — set %s or run `commitgen setup %s` (free key: %s)",
+			skipped = append(skipped, fmt.Sprintf("%s: no API key — set %s or run `CommitGen setup %s` (free key: %s)",
 				p.Name, p.KeyEnv[0], p.Name, p.KeyURL))
 			return
 		}
@@ -180,7 +180,7 @@ func buildChain(c config.Config, verbose bool) (*llm.Chain, []target, error) {
 		}
 	}
 	if len(targets) == 0 {
-		return nil, nil, errors.New("no provider is usable. Run `commitgen setup`, or use `commitgen --offline` for a no-AI message")
+		return nil, nil, errors.New("no provider is usable. Run `CommitGen setup`, or use `CommitGen --offline` for a no-AI message")
 	}
 	ch := &llm.Chain{Notify: func(m string) { warn(m) }, MaxWait: time.Duration(c.MaxWait) * time.Second}
 	if c.MaxWait <= 0 {
@@ -198,7 +198,7 @@ func buildChain(c config.Config, verbose bool) (*llm.Chain, []target, error) {
 		ch.Links = append(ch.Links, llm.Link{Name: t.name, Model: t.model, Provider: p})
 	}
 	if len(ch.Links) == 0 {
-		return nil, nil, errors.New("no provider is usable. Run `commitgen setup`")
+		return nil, nil, errors.New("no provider is usable. Run `CommitGen setup`")
 	}
 	return ch, targets, nil
 }
@@ -215,7 +215,7 @@ func describe(targets []target) string {
 	return strings.Join(parts, " → ")
 }
 
-func warn(msg string) { fmt.Fprintln(os.Stderr, "commitgen:", msg) }
+func warn(msg string) { fmt.Fprintln(os.Stderr, "CommitGen:", msg) }
 
 // friendly rewrites common errors with what to do next.
 func friendly(err error) error {
@@ -238,11 +238,11 @@ func friendly(err error) error {
 			kinds[llm.KindOf(e)] = true
 		}
 		if kinds[llm.ErrRateLimit] || kinds[llm.ErrNoCredit] {
-			hint += "\n  - free-tier limit hit: add another free provider as a fallback (`commitgen setup`)," +
-				"\n    lower max_diff to use fewer tokens, or run `commitgen --offline` for now"
+			hint += "\n  - free-tier limit hit: add another free provider as a fallback (`CommitGen setup`)," +
+				"\n    lower max_diff to use fewer tokens, or run `CommitGen --offline` for now"
 		}
 		if kinds[llm.ErrAuth] {
-			hint += "\n  - check the API key (`commitgen providers` shows where to get one)"
+			hint += "\n  - check the API key (`CommitGen providers` shows where to get one)"
 		}
 		if kinds[llm.ErrUnreachable] {
 			hint += "\n  - check your internet connection, or start your local model server"
@@ -258,7 +258,7 @@ func friendly(err error) error {
 
 func providersCmd() error {
 	cfg, _ := config.Load(repoRootOrEmpty())
-	fmt.Println("Providers (use with `commitgen setup <name>` or `provider = \"<name>\"`):")
+	fmt.Println("Providers (use with `CommitGen setup <name>` or `provider = \"<name>\"`):")
 	fmt.Println()
 	fmt.Printf("  %-11s %-28s %-24s %s\n", "NAME", "COST", "DEFAULT MODEL", "STATUS")
 	main := mainProvider(cfg)
