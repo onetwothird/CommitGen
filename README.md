@@ -2,29 +2,28 @@
 
 # CommitGen
 
-**AI-written commit messages from your staged diff. Local-first, private, and fast.**
+**Good commit messages from your staged diff — on any PC, with or without AI.**
 
+[![CI](https://github.com/onetwothird/CommitGen/actions/workflows/ci.yml/badge.svg)](https://github.com/onetwothird/CommitGen/actions/workflows/ci.yml)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/onetwothird/CommitGen?style=flat-square)](go.mod)
 [![Latest Tag](https://img.shields.io/github/v/tag/onetwothird/CommitGen?style=flat-square&label=version)](https://github.com/onetwothird/CommitGen/tags)
 [![Go Report Card](https://goreportcard.com/badge/github.com/onetwothird/CommitGen?style=flat-square)](https://goreportcard.com/report/github.com/onetwothird/CommitGen)
-[![Go Reference](https://pkg.go.dev/badge/github.com/onetwothird/CommitGen.svg)](https://pkg.go.dev/github.com/onetwothird/CommitGen)
 [![License: MIT](https://img.shields.io/github/license/onetwothird/CommitGen?style=flat-square)](LICENSE)
 
-[Features](#features) •
-[Installation](#installation) •
-[Quick Start](#quick-start) •
+[Quick start](#quick-start) •
+[Providers](#choosing-a-provider) •
 [Usage](#usage) •
-[Providers](#providers) •
 [Configuration](#configuration) •
-[FAQ](#faq)
+[Troubleshooting](#troubleshooting) •
+[Contributing](CONTRIBUTING.md)
 
 </div>
 
 ---
 
 ```console
-$ git add .
-$ CommitGen
+$ git add -A
+$ commitgen
 
   feat(auth): add refresh token rotation
 
@@ -36,190 +35,117 @@ $ CommitGen
 
 ## Why CommitGen?
 
-You commit many times a day, so writing good messages shouldn't slow you down or send your code to someone else's server.
+- **Works for everyone.** No GPU, no API key and no internet? CommitGen still writes a Conventional Commit from your diff with its built-in **offline mode**. Add a **free** AI provider in about a minute when you want better messages.
+- **Never stuck on one provider.** Free tiers run out. CommitGen moves to the next provider in your **fallback chain** when it hits a rate limit, a quota, a bad key or a network error, and it ends with offline mode, so you always get a message.
+- **Light.** One small static binary with no runtime and no dependencies. It runs on old laptops, CI machines and WSL.
+- **Safe.** It reads only staged changes and masks API keys, tokens and passwords before anything is sent. `--dry-run` shows exactly what would be sent.
 
-- **Private:** it runs against a local model through [Ollama](https://ollama.com) by default. Your code stays on your machine.
-- **Fast:** a single static binary with zero dependencies and no runtime to install.
-- **Your rules:** Conventional Commits, your scopes, your language and your team's style.
+## Quick start
 
-## Features
-
-| | |
-|---|---|
-| 🔒 **Local-first** | Works out of the box with Ollama, LM Studio, or llama.cpp. No API key required. |
-| 🔌 **Any provider** | Any OpenAI-compatible API (OpenAI, Groq, OpenRouter, vLLM), plus Anthropic. |
-| 🛡️ **Secret masking** | API keys, tokens, passwords, and private keys are redacted before anything is sent. |
-| 🧠 **Smart diffs** | Skips lockfiles, minified files, and build output. Big diffs are trimmed while keeping every file header. |
-| 🎯 **Style matching** | Learns from your recent commits and branch name to match your repo's conventions. |
-| 🪝 **Git hook** | `CommitGen hook install`, then plain `git commit` opens with a drafted message. |
-| 📦 **One commit per file** | `CommitGen -a --each` commits every changed file separately, each with its own message. |
-| 🎲 **Multiple candidates** | `-n 3` generates three options to pick from. |
-| ⚙️ **Configurable** | Global config plus per-repo `.CommitGen.toml` for scopes, style, language, and custom rules. |
-
-## Installation
-
-### With Go (1.22+)
+**1. Install** (pick one):
 
 ```bash
-go install github.com/onetwothird/CommitGen@latest
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/onetwothird/CommitGen/main/install.sh | sh
 ```
-
-### From source
-
-```bash
-git clone https://github.com/onetwothird/CommitGen.git
-cd CommitGen
-go build -o CommitGen .         # Windows: go build -o CommitGen.exe .
-```
-
-Move the binary to a directory on your `PATH`.
-
-<details>
-<summary><b>Adding CommitGen to PATH on Windows</b></summary>
 
 ```powershell
-$p = [Environment]::GetEnvironmentVariable("Path", "User")
-[Environment]::SetEnvironmentVariable("Path", "$p;C:\path\to\CommitGen", "User")
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/onetwothird/CommitGen/main/install.ps1 | iex
 ```
 
-Restart your terminal afterwards.
-</details>
-
-## Quick Start
-
-New to CommitGen? Follow these steps once and you're set.
-
-### 1. Install the requirements
-
-| Tool | Why | Get it |
-|---|---|---|
-| **Git** | CommitGen reads your staged changes | [git-scm.com](https://git-scm.com/downloads) |
-| **Go 1.22+** | to install CommitGen | [go.dev/dl](https://go.dev/dl/) |
-
-Restart your terminal afterwards, then check:
-
 ```bash
-git --version
-go version
-```
-
-You also need an AI model to write the messages. You'll choose one in step 3. It can run on your machine (free, private) or in the cloud (nothing to install).
-
-### 2. Install CommitGen
-
-```bash
+# Anywhere with Go 1.22+
 go install github.com/onetwothird/CommitGen@latest
-CommitGen version
 ```
 
-> **"CommitGen is not recognized"?** Go installs programs to `~/go/bin` (Windows: `%USERPROFILE%\go\bin`). Add that folder to your `PATH` and restart your terminal.
+> `go install` names the binary `CommitGen`. On Windows `commitgen` works too. On macOS and Linux, type `CommitGen`, or add `alias commitgen=CommitGen` to your shell profile.
 
-### 3. Choose where the AI runs
-
-Pick **one** option. Not sure? Use **A** if your computer has 8 GB+ of RAM. Otherwise use **B**.
-
-| | A. Local (Ollama) | B. Cloud (Groq, free tier) |
-|---|---|---|
-| **Cost** | Free | Free tier, no card needed |
-| **Privacy** | Code never leaves your machine | Diff is sent to Groq (secrets are masked first) |
-| **Setup** | Install Ollama + 2–5 GB download | Create an API key (about 1 minute) |
-| **Works offline** | Yes | No |
-| **Best for** | Most developers, company code | Low-end laptops, no-install setups, CI |
-
-#### Option A: Local with Ollama (default, recommended)
-
-1. Install Ollama from [ollama.com/download](https://ollama.com/download). On Windows you can also run `winget install Ollama.Ollama`. On macOS, `brew install ollama`.
-2. Download a model (one time):
-
-   ```bash
-   ollama pull qwen2.5-coder:7b     # 16 GB RAM or a GPU (about 5 GB)
-   ollama pull qwen2.5-coder:3b     # 8 GB RAM or older laptops (about 2 GB)
-   ```
-
-3. If you pulled the 3b model, make it your default:
-
-   ```bash
-   # macOS / Linux (add to ~/.bashrc or ~/.zshrc to keep it)
-   export COMMITGEN_MODEL=qwen2.5-coder:3b
-   ```
-
-   ```powershell
-   # Windows (permanent; only applies to terminals opened afterwards, so close and reopen yours)
-   setx COMMITGEN_MODEL "qwen2.5-coder:3b"
-   ```
-
-Keep the Ollama app running in the background. No further setup is needed: CommitGen talks to Ollama by default.
-
-#### Option B: Cloud with Groq (no install)
-
-1. Create a free API key at [console.groq.com/keys](https://console.groq.com/keys).
-2. Point CommitGen at Groq:
-
-   ```bash
-   # macOS / Linux (add to ~/.bashrc or ~/.zshrc to keep it)
-   export COMMITGEN_BASE_URL=https://api.groq.com/openai/v1
-   export COMMITGEN_MODEL=openai/gpt-oss-20b
-   export COMMITGEN_API_KEY=gsk_your_key_here
-   ```
-
-   ```powershell
-   # Windows (permanent)
-   setx COMMITGEN_BASE_URL "https://api.groq.com/openai/v1"
-   setx COMMITGEN_MODEL "openai/gpt-oss-20b"
-   setx COMMITGEN_API_KEY "gsk_your_key_here"
-   ```
-
-3. **Windows: close the terminal and open a new one.** `setx` saves the settings for terminals opened *after* it runs. The window where you ran it does not get them. **In VS Code's built-in terminal, a new terminal tab is not enough: quit VS Code completely and reopen it.** If you run CommitGen there, it falls back to the local Ollama default and fails with `could not reach http://localhost:11434`. You can also skip the restart by setting the values for the current window:
-
-   ```powershell
-   $env:COMMITGEN_BASE_URL = "https://api.groq.com/openai/v1"
-   $env:COMMITGEN_MODEL    = "openai/gpt-oss-20b"
-   $env:COMMITGEN_API_KEY  = "gsk_your_key_here"
-   ```
-
-4. Confirm CommitGen picked them up: `CommitGen config show` should list the Groq URL and model, not `localhost:11434`.
-
-> **Keep your key secret.** Never paste your real `gsk_...` key into issues, chats, screenshots, or commits. If it leaks, delete it at [console.groq.com/keys](https://console.groq.com/keys) and create a new one.
-
-You can put these settings in a config file instead: run `CommitGen config init`, then edit the file at the path that `CommitGen config path` prints. You can also use OpenAI, Anthropic, OpenRouter, or LM Studio. See [Providers](#providers).
-
-Check your setup any time with `CommitGen config show`.
-
-### 4. Write your first commit message
-
-Inside any git repository:
+**2. Use it.** Inside any git repository:
 
 ```bash
 git add -A
-CommitGen
+commitgen
 ```
 
-CommitGen shows a drafted message and asks what to do:
+That's it. With nothing set up, CommitGen uses **offline mode**: rule-based, instant and private.
 
-| Key | Action |
-|---|---|
-| `Enter` or `c` | Commit with this message |
-| `e` | Open the message in your editor to tweak it, then commit |
-| `r` | Generate a new message |
-| `q` | Quit without committing |
-
-The first run can take 10–30 seconds while the model loads. Later runs are faster.
-
-### 5. Pick your workflow
+**3. Optional: turn on AI** (free options, about a minute):
 
 ```bash
-CommitGen -a --each      # commit every changed file separately, automatically
-CommitGen -c -y          # generate and commit in one step, no questions
-CommitGen hook install   # make plain `git commit` draft the message for you
+commitgen setup
 ```
+
+The wizard lists the providers, shows where to get a free key, tests the connection and saves everything. Not sure which to pick? Choose **Gemini**: it's free, needs no credit card and runs on any PC.
+
+## Choosing a provider
+
+Run `commitgen providers` to see this list with the keys you already have.
+
+| Provider | Cost | Speed | Runs on | Needs | Best for |
+|---|---|---|---|---|---|
+| `offline` | Free | Instant | Anything | Nothing | No internet, no key, CI, last-resort fallback |
+| `gemini` | Free tier, no card | Fast | Any PC | [Free key](https://aistudio.google.com/apikey) | **Recommended default**: generous daily quota |
+| `groq` | Free tier, no card | Very fast | Any PC | [Free key](https://console.groq.com/keys) | Speed; smaller daily token limit |
+| `openrouter` | Free models, no card | Varies | Any PC | [Free key](https://openrouter.ai/keys) | `openrouter/free` picks any free model that's up |
+| `cerebras` | Free tier, no card | Very fast | Any PC | [Free key](https://cloud.cerebras.ai) | Large free token allowance |
+| `github` | Free with GitHub | Fast | Any PC | [Token with `models:read`](https://github.com/settings/personal-access-tokens) | You already have a GitHub account |
+| `mistral` | Free Experiment plan | Fast | Any PC | [Free key](https://console.mistral.ai/api-keys) | European provider |
+| `ollama` | Free, private | Depends on PC | 4 GB+ RAM | [Ollama](https://ollama.com/download) | Private company code |
+| `lmstudio` | Free, private | Depends on PC | 4 GB+ RAM | [LM Studio](https://lmstudio.ai) | Desktop app users |
+| `llamacpp` | Free, private | Depends on PC | 2 GB+ RAM | [llama.cpp](https://github.com/ggml-org/llama.cpp) / llamafile | Lightest local setup |
+| `openai` | Paid (cheap) | Fast | Any PC | [Key](https://platform.openai.com/api-keys) | Also any OpenAI-compatible URL |
+| `anthropic` | Paid (cheap) | Fast | Any PC | [Key](https://console.anthropic.com/settings/keys) | Claude models |
+
+Free tiers and model lineups change often. Check each provider's page for current limits.
+
+### Low-spec PC?
+
+You don't need a strong computer:
+
+- **No GPU, 4 GB RAM or less:** use a hosted free provider (`gemini`, `groq`, `openrouter`, `cerebras`). Your PC only sends a small request.
+- **No internet, or company code that must stay local:** use `offline`, or a tiny local model:
+
+  | Model | Download | RAM needed | Quality |
+  |---|---|---|---|
+  | `qwen2.5-coder:0.5b` | ~400 MB | 2 GB | basic |
+  | `qwen2.5-coder:1.5b` *(default for ollama)* | ~1 GB | 4 GB | good |
+  | `qwen2.5-coder:3b` | ~2 GB | 8 GB | better |
+  | `qwen2.5-coder:7b` | ~5 GB | 16 GB or a GPU | best |
+
+  ```bash
+  ollama pull qwen2.5-coder:1.5b
+  commitgen setup ollama
+  ```
+
+### Fallback chain
+
+The main provider is tried first, then each fallback in order:
+
+```toml
+provider = "groq"
+fallback = ["gemini", "openrouter", "offline"]
+```
+
+```console
+$ commitgen
+commitgen: groq failed (rate limit / quota reached), trying gemini
+  fix(api): handle empty pagination cursor
+```
+
+- With `provider = "auto"` (the default), CommitGen uses every provider whose key it finds (`GROQ_API_KEY`, `GEMINI_API_KEY`, …), then a running Ollama, then `offline`.
+- `offline` is added at the end automatically unless you write your own `fallback` list without it.
+- Providers without a key are skipped, with a note telling you where to get one.
 
 ## Usage
 
 ```text
-CommitGen [flags]
-CommitGen hook install | uninstall
-CommitGen config init | path | show
-CommitGen version
+commitgen [flags]              generate a message for the staged changes
+commitgen setup [provider]     guided setup (key, model, test, fallback)
+commitgen providers            list providers, costs and which keys are set
+commitgen hook install|uninstall
+commitgen config init|path|show
+commitgen version
 ```
 
 | Flag | Description |
@@ -228,88 +154,61 @@ CommitGen version
 | `-y` | With `-c`: commit immediately without opening the editor |
 | `-p` | Print the message only (for scripts and aliases) |
 | `-a` | Stage all changes first (like `git add -A`) |
-| `--each` | Commit every staged file separately, each with its own message (no prompts) |
+| `--each` | Commit every staged file separately, each with its own message |
 | `-n <num>` | Generate several candidates and pick one |
-| `-m "<text>"` | Give the model extra context, e.g. `-m "closes #42"` |
-| `--dry-run` | Show exactly what would be sent to the model, then exit |
+| `-m "<text>"` | Extra context, e.g. `-m "closes #42"`. In offline mode it becomes the summary |
+| `--offline` | No AI for this run |
+| `--provider <name>` | Use another provider for this run, e.g. `--provider gemini` |
 | `--model <name>` | Override the model |
 | `--url <url>` | Override the API base URL |
-| `--provider <name>` | `openai` or `anthropic` |
 | `--style <name>` | `conventional` or `simple` |
-| `--lang <language>` | Language of the message |
-| `--max <chars>` | Max diff characters sent to the model |
+| `--lang <language>` | Language of the message, e.g. `--lang Spanish` |
+| `--max <chars>` | Max diff characters sent (fewer = fewer tokens used) |
+| `--dry-run` | Show exactly what would be sent, then exit |
 | `--no-redact` | Disable secret masking |
-| `-v` | Verbose output |
+| `-v` | Verbose: show the provider chain and diff size |
 
-### One commit per file
-
-```bash
-CommitGen -a --each        # stage everything, then commit file by file
-CommitGen --each           # only the files you already staged
-CommitGen -a --each -p     # preview the messages without committing
-```
-
-CommitGen commits exactly what you staged, including partially staged files. Unstaged changes are left alone. If a step fails, it stops and leaves the remaining files staged.
-
-**Tip:** add a git alias:
+### Examples
 
 ```bash
-git config --global alias.ai '!CommitGen -c'
-git ai
+commitgen                          # draft, then commit / edit / regenerate
+commitgen -c -y                    # generate and commit in one step
+commitgen -a --each                # one commit per changed file
+commitgen -a --each -p             # preview those messages, commit nothing
+commitgen -n 3                     # pick from three candidates
+commitgen -m "fixes #42"           # give the model a hint
+commitgen --offline -m "fix login" # instant, no AI: "fix(auth): fix login"
+commitgen --provider ollama        # one-off local run
+commitgen --lang Japanese          # write the message in Japanese
+commitgen hook install             # plain `git commit` now drafts the message
+git config --global alias.ai '!commitgen -c'   # then: git ai
 ```
 
-## Providers
+### Offline mode
 
-CommitGen talks to any **OpenAI-compatible** endpoint, plus Anthropic's native API.
+Offline mode reads the diff and decides:
 
-| Provider | `base_url` | Example model | API key env var |
-|---|---|---|---|
-| Ollama *(default)* | `http://localhost:11434/v1` | `qwen2.5-coder:7b` | — |
-| LM Studio | `http://localhost:1234/v1` | *(loaded model)* | — |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` | `OPENAI_API_KEY` |
-| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` | `COMMITGEN_API_KEY` |
-| OpenRouter | `https://openrouter.ai/api/v1` | `meta-llama/llama-3.1-8b-instruct` | `COMMITGEN_API_KEY` |
-| Anthropic | *(set `provider = "anthropic"`)* | `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
+- **Type:** `docs` (Markdown, `docs/`), `test` (`*_test.go`, `*.spec.ts`, `tests/` …), `ci` (`.github/workflows`, GitLab CI …), `build` (`go.mod`, `package.json`, `Dockerfile` …), `chore` (config files), `style` (whitespace-only), `feat` (new files or functions), `fix` (small or fix-related edits), `refactor` (removals, renames, larger rewrites). A `-m` hint like "fix …" or "add …" overrides it.
+- **Scope:** the most specific shared folder, skipping generic ones like `src/` and `internal/`, and limited to your `scopes` list if you set one.
+- **Summary and body:** new functions, classes and types are named. It recognizes Go, Python, JavaScript/TypeScript, PHP, Java, C#, Kotlin, Swift, Rust, Ruby, Elixir, C/C++, Dart, Lua and shell. The body lists each file with its `+/-` line counts.
 
-<details>
-<summary><b>Example: OpenAI</b></summary>
+It can't know *why* you made a change, so add `-m "why"` or switch on AI for richer messages.
 
-```bash
-# macOS / Linux
-export COMMITGEN_BASE_URL=https://api.openai.com/v1
-export COMMITGEN_MODEL=gpt-4o-mini
-export OPENAI_API_KEY=sk-...
-```
+### Languages
 
-```powershell
-# Windows PowerShell
-$env:COMMITGEN_BASE_URL = "https://api.openai.com/v1"
-$env:COMMITGEN_MODEL    = "gpt-4o-mini"
-$env:OPENAI_API_KEY     = "sk-..."
-```
-</details>
-
-<details>
-<summary><b>Example: Anthropic</b></summary>
-
-```bash
-export COMMITGEN_PROVIDER=anthropic
-export COMMITGEN_MODEL=claude-haiku-4-5
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-</details>
+AI providers can write in any language: set `language = "Português"` in your config or pass `--lang`. Conventional Commit type keywords (`feat`, `fix` …) stay in English. Offline mode writes in English.
 
 ## Configuration
 
-Create a starter config with:
+`commitgen setup` writes the config for you. To edit it by hand:
 
 ```bash
-CommitGen config init     # writes the global config
-CommitGen config path     # shows where it lives
-CommitGen config show     # shows the effective settings
+commitgen config path    # where the global config lives
+commitgen config init    # write a commented starter file
+commitgen config show    # effective settings and the provider chain
 ```
 
-Add a `.CommitGen.toml` to a repository root to set project rules:
+Add a `.commitgen.toml` to a repository to set project rules (commit it so your team shares them):
 
 ```toml
 style        = "conventional"
@@ -318,42 +217,89 @@ exclude      = ["*.snap", "docs/generated/*"]
 instructions = "Reference the Jira ticket from the branch name, e.g. PROJ-123."
 ```
 
-**Precedence:** defaults → global config → repo `.CommitGen.toml` → environment variables → flags
+**Precedence:** defaults → global config → repo `.commitgen.toml` → environment variables → flags.
 
-<details>
-<summary><b>All options</b></summary>
+### All options
 
 | Key | Default | Description |
 |---|---|---|
-| `provider` | `openai` | `openai` (any OpenAI-compatible API), `ollama`, or `anthropic`. Ollama on port 11434 is detected automatically |
-| `base_url` | `http://localhost:11434/v1` | API base URL |
-| `model` | `qwen2.5-coder:7b` | Model name |
-| `api_key` | — | Prefer env vars: `COMMITGEN_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
+| `provider` | `auto` | `auto`, `offline`, or a provider name from the table above |
+| `fallback` | — | Providers to try next, e.g. `["gemini", "offline"]` |
+| `model` | provider default | Model for the main provider |
+| `base_url` | provider default | For custom OpenAI-compatible servers (vLLM, LocalAI, a proxy…) |
+| `api_key` | — | Key for the main provider (prefer env vars or `<name>_api_key`) |
+| `<name>_api_key` | — | Key for one provider, e.g. `gemini_api_key = "..."` |
+| `<name>_model` | — | Model for one provider, e.g. `ollama_model = "qwen2.5-coder:3b"` |
 | `style` | `conventional` | `conventional` or `simple` |
 | `language` | `English` | Language of the message |
-| `max_diff` | `12000` | Max diff characters sent |
-| `history` | `10` | Recent commit subjects used for style matching |
+| `max_diff` | `12000` | Max diff characters sent. Lower it to stretch free-tier quotas |
+| `history` | `10` | Recent commit subjects used to match your repo's style |
 | `temperature` | `0.2` | Sampling temperature |
-| `timeout` | `120` | Request timeout in seconds |
-| `num_ctx` | `8192` | Ollama context window in tokens. Raise it for large diffs if you have the RAM |
-| `exclude` | — | Extra pathspecs to leave out of the diff |
+| `timeout` | `60` | Request timeout in seconds |
+| `num_ctx` | `8192` | Ollama context window in tokens |
+| `exclude` | — | Extra pathspecs left out of the diff (lockfiles, `dist/` and images are already skipped) |
 | `scopes` | — | Allowed Conventional Commit scopes |
 | `instructions` | — | Extra rules for the model |
 
-Environment variables: `COMMITGEN_PROVIDER`, `COMMITGEN_BASE_URL`, `COMMITGEN_MODEL`, `COMMITGEN_API_KEY`, `COMMITGEN_STYLE`, `COMMITGEN_LANGUAGE`, `COMMITGEN_CONFIG`.
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `GROQ_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `OPENROUTER_API_KEY`, `CEREBRAS_API_KEY`, `MISTRAL_API_KEY`, `GITHUB_MODELS_TOKEN` (or `GITHUB_TOKEN`), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | Provider keys |
+| `COMMITGEN_PROVIDER`, `COMMITGEN_MODEL`, `COMMITGEN_BASE_URL`, `COMMITGEN_API_KEY` | Main provider settings |
+| `COMMITGEN_FALLBACK` | Comma-separated fallback list, e.g. `gemini,offline` |
+| `COMMITGEN_STYLE`, `COMMITGEN_LANGUAGE` | Message style and language |
+| `COMMITGEN_CONFIG` | Use a different config file |
+
+<details>
+<summary><b>Setting environment variables permanently</b></summary>
+
+```bash
+# macOS / Linux: add to ~/.bashrc or ~/.zshrc
+export GEMINI_API_KEY=your_key
+```
+
+```powershell
+# Windows: saved for terminals opened afterwards
+setx GEMINI_API_KEY "your_key"
+```
+
+On Windows, `setx` only affects terminals opened **after** it runs. In VS Code, quit and reopen the whole app. To use the value in the current window right away: `$env:GEMINI_API_KEY = "your_key"`.
 </details>
+
+> **Keep keys secret.** Don't paste them into issues, screenshots or commits. Keys saved by `commitgen setup` go in your user config file (created with owner-only permissions), never in the repository.
+
+## Troubleshooting
+
+| Message | What to do |
+|---|---|
+| `nothing is staged` | Stage files with `git add <file>` or `git add -A`, or run `commitgen -a`. |
+| `this folder is not a git repository` | `cd` into your project, or run `git init`. |
+| `git is not installed or not on your PATH` | Install from [git-scm.com](https://git-scm.com/downloads) and reopen the terminal. |
+| `rate limit or free-tier quota reached` | Add a fallback (`commitgen setup`), lower `max_diff`, wait until the time shown, or use `--offline`. |
+| `the API key was rejected or is missing` | Re-run `commitgen setup <provider>`. `commitgen providers` shows where to get a key. |
+| `skipping gemini: no API key` | The provider is in your chain but has no key. Set it, or remove it from `fallback`. |
+| `could not connect — is the local model server running?` | Start Ollama (`ollama serve`) or LM Studio's server, or use a hosted provider. |
+| `not found — check base_url and the model name` | Wrong model name. For Ollama: `ollama pull <model>`. For hosted providers, check their model list. |
+| The model describes the diff instead of writing a message | CommitGen retries automatically. Also try staging less at once, adding `-m "..."`, or a larger model. |
+| Settings don't seem to apply | Run `commitgen config show` to see the effective provider chain. On Windows, open a new terminal after `setx`. |
+| Old setup with `COMMITGEN_BASE_URL` | Still works: the URL is matched to its provider (Groq, OpenAI, …) or treated as a custom server. |
+
+The git hook never blocks a commit: if generation fails, `git commit` continues as normal. It also skips merges, amends and `-m` commits.
 
 ## How it works
 
 ```text
-git diff --cached  →  filter noise  →  mask secrets  →  build prompt  →  LLM  →  clean output  →  git commit
+git diff --cached → skip noise → mask secrets → build prompt → provider chain → clean up → git commit
+                                                                     │
+                                       groq → gemini → … → ollama → offline
 ```
 
-1. Reads your **staged** changes only. Nothing unstaged is ever sent.
-2. Drops lockfiles, minified assets, and build output, then trims oversized diffs.
-3. Redacts anything that looks like a secret.
-4. Adds the file summary, branch name, and recent commit subjects for context.
-5. Cleans the model's reply (strips code fences, quotes, and preambles). If the reply isn't a valid commit message, it asks the model to rewrite it.
+1. Reads **staged** changes only. Lockfiles, minified assets, build output and images are skipped, and big diffs are trimmed while keeping every file header.
+2. Masks anything that looks like a secret.
+3. Adds the file summary, branch name and recent commit subjects so the message matches your repo's style.
+4. Tries each provider in the chain until one answers.
+5. Cleans the reply (code fences, quotes, preambles, `<think>` blocks). If it isn't a valid commit message, asks the model to fix it.
 6. Hands the message to `git commit`.
 
 ## FAQ
@@ -361,38 +307,22 @@ git diff --cached  →  filter noise  →  mask secrets  →  build prompt  → 
 <details>
 <summary><b>Does my code leave my machine?</b></summary>
 
-Not with the default setup. CommitGen talks to a local Ollama server. If you configure a cloud provider, the filtered and redacted diff is sent to that provider. Run `CommitGen --dry-run` to see exactly what would be sent.
+Only if you use a hosted provider, and then only the filtered, secret-masked staged diff goes to that provider. `offline`, `ollama`, `lmstudio` and `llamacpp` keep everything local. Run `commitgen --dry-run` to see exactly what would be sent.
 </details>
 
 <details>
-<summary><b>Which local model should I use?</b></summary>
+<summary><b>How do I make free tiers last longer?</b></summary>
 
-`qwen2.5-coder:7b` is a good default. On machines with less memory, try `qwen2.5-coder:3b` or `llama3.2:3b`.
+- Commit smaller pieces. That also gives you a cleaner history.
+- Lower `max_diff` (for example `6000`).
+- Put two or three free providers in `fallback` so the quotas add up.
+- Avoid `-n 3` on free tiers: it makes three requests.
 </details>
 
 <details>
-<summary><b>The model describes my diff instead of writing a commit message</b></summary>
+<summary><b>Can I use it in CI or scripts?</b></summary>
 
-This happens with small local models on large diffs. CommitGen detects it and asks the model to rewrite its answer automatically. If it still happens:
-
-- Commit in smaller pieces (`git add` one feature at a time). That also gives you a cleaner history.
-- Add context: `CommitGen -m "add accessibility settings"`
-- Use a larger model (`--model qwen2.5-coder:14b`) or raise `num_ctx` in your config.
-</details>
-
-<details>
-<summary><b>"could not reach http://localhost:11434"</b></summary>
-
-CommitGen is using the local Ollama default. Either:
-
-- **You want Ollama:** Ollama isn't running. Start the Ollama app or run `ollama serve`.
-- **You set up Groq or another cloud provider:** your settings haven't reached this terminal. On Windows, `setx` only affects terminals opened *after* you ran it. Close the terminal, open a new one, and run `CommitGen config show` to confirm the base URL is no longer `localhost:11434`. Your staged files remain staged, so you can rerun CommitGen right away.
-</details>
-
-<details>
-<summary><b>Will the git hook block my commits if something fails?</b></summary>
-
-No. If generation fails, the hook exits quietly and git continues as normal. It also skips merges, amends, and commits made with `-m`.
+Yes. `commitgen -p` prints the message only. With no key in the environment it uses offline mode, so it never needs network access.
 </details>
 
 ## Development
@@ -400,31 +330,25 @@ No. If generation fails, the hook exits quietly and git continues as normal. It 
 ```bash
 go test ./...
 go vet ./...
-go build -o CommitGen .
+go build -o commitgen .
 ```
-
-Project layout:
 
 ```text
 .
-├── main.go              # CLI entry point and commands
+├── main.go            CLI entry point and commands
+├── providers.go       provider resolution, fallback chain, friendly errors
+├── setup.go           `commitgen setup` wizard
 └── internal/
-    ├── config/          # config files and env vars
-    ├── git/             # git commands (diff, log, branch)
-    ├── llm/             # Ollama, OpenAI-compatible and Anthropic clients
-    ├── prompt/          # prompt building and output cleanup
-    └── redact/          # secret masking
+    ├── config/        config files and env vars
+    ├── git/           git commands (diff, log, branch)
+    ├── heuristic/     offline (no-AI) message generator
+    ├── llm/           provider presets, clients, errors, fallback chain
+    ├── prompt/        prompt building and output cleanup
+    └── redact/        secret masking
 ```
 
-## Contributing
-
-Contributions are welcome.
-
-1. Fork the repo and create a branch: `git checkout -b feat/my-feature`
-2. Make your changes and add tests
-3. Run `go test ./...`
-4. Commit (with CommitGen, of course) and open a pull request
+Adding a provider that speaks the OpenAI API is usually one entry in [`internal/llm/presets.go`](internal/llm/presets.go). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Released under the [MIT License](LICENSE).
+[MIT](LICENSE)
