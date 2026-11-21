@@ -179,7 +179,10 @@ func buildChain(c config.Config, verbose bool) (*llm.Chain, []target, error) {
 	if len(targets) == 0 {
 		return nil, nil, errors.New("no provider is usable. Run `commitgen setup`, or use `commitgen --offline` for a no-AI message")
 	}
-	ch := &llm.Chain{Notify: func(m string) { warn(m) }}
+	ch := &llm.Chain{Notify: func(m string) { warn(m) }, MaxWait: time.Duration(c.MaxWait) * time.Second}
+	if c.MaxWait <= 0 {
+		ch.MaxWait = -1 // never wait
+	}
 	for _, t := range targets {
 		p, err := llm.New(llm.Options{
 			Provider: t.name, BaseURL: t.base, APIKey: t.key,

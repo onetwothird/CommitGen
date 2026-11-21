@@ -28,6 +28,7 @@ type Config struct {
 	History      int
 	Timeout      int
 	NumCtx       int
+	MaxWait      int // seconds to wait out a rate limit before using offline mode
 }
 
 func Defaults() Config {
@@ -42,6 +43,7 @@ func Defaults() Config {
 		History:     10,
 		Timeout:     60,
 		NumCtx:      8192,
+		MaxWait:     30,
 	}
 }
 
@@ -143,6 +145,8 @@ func (c *Config) apply(key string, v value) error {
 		c.History, err = v.int()
 	case "timeout":
 		c.Timeout, err = v.int()
+	case "max_wait":
+		c.MaxWait, err = v.int()
 	case "num_ctx":
 		c.NumCtx, err = v.int()
 	case "temperature":
@@ -374,6 +378,7 @@ history     = 10               # recent commit subjects used to match repo style
 temperature = 0.2
 timeout     = 60
 num_ctx     = 8192             # Ollama context window
+max_wait    = 30               # seconds to wait out a short rate limit before falling back to offline
 
 # exclude = ["docs/generated/*", "*.snap"]
 # scopes  = ["api", "ui", "cli"]
