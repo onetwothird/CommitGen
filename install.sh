@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install commitgen on macOS or Linux.
+# Install CommitGen on macOS or Linux.
 #
 #   curl -fsSL https://raw.githubusercontent.com/onetwothird/CommitGen/main/install.sh | sh
 #
@@ -26,7 +26,7 @@ if [ -z "$url" ]; then
   if command -v go >/dev/null 2>&1; then
     echo "No release binary found; building with Go instead..."
     go install "github.com/$REPO@latest"
-    echo "Installed to $(go env GOPATH)/bin/commitgen"
+    echo "Installed to $(go env GOPATH)/bin/CommitGen"
     exit 0
   fi
   echo "No release binary for ${os}/${arch} and Go is not installed." >&2
@@ -37,15 +37,17 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 echo "Downloading $url"
-curl -fsSL "$url" -o "$tmp/commitgen.tar.gz"
-tar -xzf "$tmp/commitgen.tar.gz" -C "$tmp"
+curl -fsSL "$url" -o "$tmp/CommitGen.tar.gz"
+tar -xzf "$tmp/CommitGen.tar.gz" -C "$tmp"
 mkdir -p "$DIR"
-install -m 0755 "$tmp/commitgen" "$DIR/commitgen"
-echo "Installed $DIR/commitgen"
+bin="$tmp/CommitGen"
+[ -f "$bin" ] || bin="$tmp/commitgen"   # releases before the rename
+install -m 0755 "$bin" "$DIR/CommitGen"
+echo "Installed $DIR/CommitGen"
 
 case ":$PATH:" in
   *":$DIR:"*) ;;
   *) echo "Note: $DIR is not on your PATH. Add this to your shell profile:"
      echo "  export PATH=\"$DIR:\$PATH\"" ;;
 esac
-echo "Next: run 'commitgen setup' (or just 'commitgen' for offline mode)."
+echo "Next: run 'CommitGen setup' (or just 'CommitGen' for offline mode)."
