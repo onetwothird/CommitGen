@@ -1,5 +1,5 @@
 version: 2
-project_name: commitgen
+project_name: CommitGen
 
 builds:
   - env: [CGO_ENABLED=0]
@@ -12,6 +12,11 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - completions/*
 
 checksum:
   name_template: checksums.txt
