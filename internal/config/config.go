@@ -28,7 +28,10 @@ type Config struct {
 	History      int
 	Timeout      int
 	NumCtx       int
-	MaxWait      int // seconds to wait out a rate limit before using offline mode
+	MaxWait      int    // seconds to wait out a rate limit before using offline mode
+	Cache        bool   // reuse messages for a diff that was already sent
+	IssueFooter  string // footer word for the branch's issue, e.g. "Refs" -> "Refs #123"; "" = off
+	Breaking     bool   // mark removed/changed public API as a breaking change (offline mode)
 }
 
 func Defaults() Config {
@@ -44,6 +47,9 @@ func Defaults() Config {
 		Timeout:     60,
 		NumCtx:      8192,
 		MaxWait:     30,
+		Cache:       true,
+		IssueFooter: "Refs",
+		Breaking:    true,
 	}
 }
 
@@ -171,6 +177,12 @@ func (c *Config) apply(key string, v value) error {
 		c.Timeout, err = v.int()
 	case "max_wait":
 		c.MaxWait, err = v.int()
+	case "cache":
+		c.Cache, err = v.bool()
+	case "breaking":
+		c.Breaking, err = v.bool()
+	case "issue_footer":
+		c.IssueFooter, err = v.str()
 	case "num_ctx":
 		c.NumCtx, err = v.int()
 	case "temperature":
@@ -212,6 +224,7 @@ func (v value) str() (string, error) {
 	return unquote(v.raw)
 }
 func (v value) int() (int, error)       { return strconv.Atoi(v.raw) }
+func (v value) bool() (bool, error)     { return strconv.ParseBool(v.raw) }
 func (v value) float() (float64, error) { return strconv.ParseFloat(v.raw, 64) }
 func (v value) list() ([]string, error) {
 	if !v.isArr {
@@ -403,6 +416,10 @@ temperature = 0.2
 timeout     = 60
 num_ctx     = 8192             # Ollama context window
 max_wait    = 30               # seconds to wait out a short rate limit before falling back to offline
+
+cache        = true            # reuse the message for a diff you already generated (saves API calls)
+issue_footer = "Refs"          # branch fix/123-x adds "Refs #123"; set to "" to turn off, or "Closes"
+breaking     = true            # offline mode: mark removed/changed exported Go/Rust API as breaking
 
 # exclude = ["docs/generated/*", "*.snap"]
 # scopes  = ["api", "ui", "cli"]
