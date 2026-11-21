@@ -10,8 +10,6 @@ import (
 	"github.com/onetwothird/CommitGen/internal/heuristic"
 )
 
-// Offline writes the message from the diff with rules instead of a model.
-// It never fails as long as something is staged.
 type Offline struct{}
 
 func (Offline) Generate(_ context.Context, r Request, on OnToken) (string, error) {
@@ -25,7 +23,6 @@ func (Offline) Generate(_ context.Context, r Request, on OnToken) (string, error
 	return msg, nil
 }
 
-// Link is one provider in a fallback chain.
 type Link struct {
 	Name     string // display name, e.g. "groq"
 	Model    string // model used with this provider
