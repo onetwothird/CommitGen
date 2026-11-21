@@ -23,3 +23,64 @@ checksum:
 
 changelog:
   sort: asc
+
+# Package managers. Each one is published only when its token is set (see
+# CONTRIBUTING.md, "Releasing"); without the token the step is skipped.
+
+# Windows: scoop bucket add onetwothird https://github.com/onetwothird/scoop-bucket
+#          scoop install CommitGen
+scoops:
+  - name: CommitGen
+    homepage: https://github.com/onetwothird/CommitGen
+    description: Conventional Commit messages from your staged diff, with free AI, local models or offline mode.
+    license: MIT
+    skip_upload: '{{ if index .Env "SCOOP_BUCKET_TOKEN" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: onetwothird
+      name: scoop-bucket
+      token: '{{ index .Env "SCOOP_BUCKET_TOKEN" }}'
+
+# macOS / Linux: brew install onetwothird/tap/commitgen
+# (Homebrew requires lowercase formula names; the installed command is CommitGen.)
+brews:
+  - name: commitgen
+    homepage: https://github.com/onetwothird/CommitGen
+    description: Conventional Commit messages from your staged diff, with free AI, local models or offline mode.
+    license: MIT
+    directory: Formula
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: onetwothird
+      name: homebrew-tap
+      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+    install: |
+      bin.install "CommitGen"
+      bash_completion.install "completions/CommitGen.bash" => "CommitGen"
+      zsh_completion.install "completions/_CommitGen"
+      fish_completion.install "completions/CommitGen.fish"
+    test: |
+      system "#{bin}/CommitGen", "version"
+
+# Windows: winget install onetwothird.CommitGen
+# Opens a pull request to microsoft/winget-pkgs from your fork of it.
+winget:
+  - name: CommitGen
+    publisher: onetwothird
+    package_identifier: onetwothird.CommitGen
+    short_description: Conventional Commit messages from your staged diff, with free AI, local models or offline mode.
+    license: MIT
+    homepage: https://github.com/onetwothird/CommitGen
+    publisher_url: https://github.com/onetwothird
+    tags: [git, commit, cli, ai, conventional-commits]
+    skip_upload: '{{ if index .Env "WINGET_TOKEN" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: onetwothird
+      name: winget-pkgs
+      branch: "CommitGen-{{ .Version }}"
+      token: '{{ index .Env "WINGET_TOKEN" }}'
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
