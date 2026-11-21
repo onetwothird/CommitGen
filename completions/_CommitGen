@@ -1,0 +1,83 @@
+#compdef CommitGen commitgen
+# Zsh completion for CommitGen.
+#
+# Load it now:        source <(CommitGen completion zsh)
+# Load it every time: echo 'source <(CommitGen completion zsh)' >> ~/.zshrc
+#   (needs `autoload -Uz compinit && compinit` earlier in ~/.zshrc)
+
+_CommitGen() {
+    local -a providers commands
+    providers=(
+        'offline:no AI, no key, no internet'
+        'gemini:Google Gemini (free tier)'
+        'groq:Groq (free tier, very fast)'
+        'openrouter:OpenRouter free models'
+        'cerebras:Cerebras (free tier)'
+        'github:GitHub Models (free with GitHub)'
+        'mistral:Mistral (free Experiment plan)'
+        'ollama:local Ollama'
+        'lmstudio:local LM Studio'
+        'llamacpp:local llama.cpp / llamafile'
+        'openai:OpenAI or any OpenAI-compatible URL'
+        'anthropic:Anthropic Claude'
+    )
+    commands=(
+        'setup:pick an AI provider (guided)'
+        'providers:list providers, costs and keys'
+        'hook:install or remove the git hook'
+        'config:show or create the config file'
+        'completion:print a shell completion script'
+        'version:print the version'
+        'help:show help'
+    )
+
+    if (( CURRENT == 2 )) && [[ $words[2] != -* ]]; then
+        _describe -t commands 'CommitGen command' commands
+        return
+    fi
+
+    case $words[2] in
+        setup)
+            (( CURRENT == 3 )) && _describe -t providers 'provider' providers
+            return ;;
+        hook)
+            (( CURRENT == 3 )) && _values 'hook command' install uninstall
+            (( CURRENT == 4 )) && _values 'option' --force
+            return ;;
+        config)
+            (( CURRENT == 3 )) && _values 'config command' init path show
+            return ;;
+        completion)
+            (( CURRENT == 3 )) && _values 'shell' bash zsh fish powershell
+            return ;;
+        providers|version|help)
+            return ;;
+    esac
+
+    _arguments \
+        '-c[commit with the message (opens your editor)]' \
+        '-y[with -c: commit without opening the editor]' \
+        '-p[print the message only]' \
+        '-a[stage all changes first]' \
+        '-v[verbose output]' \
+        '-n[number of candidates]:count:(2 3 4 5)' \
+        '-m[extra context for the message]:hint: ' \
+        '--each[one commit per staged file]' \
+        '--offline[no AI: rule-based message]' \
+        '--dry-run[show what would be sent, then exit]' \
+        '--no-redact[do not mask secrets]' \
+        '--provider[provider for this run]:provider:->provider' \
+        '--model[model name]:model: ' \
+        '--url[OpenAI-compatible base URL]:url:_urls' \
+        '--style[message style]:style:(conventional simple)' \
+        '--lang[language of the message]:language:(English Spanish Portuguese French German Italian Dutch Japanese Korean Chinese Filipino Indonesian Vietnamese Russian Turkish Arabic Hindi)' \
+        '--max[max diff characters sent]:chars: '
+
+    [[ $state == provider ]] && _describe -t providers 'provider' providers
+}
+
+if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
+    _CommitGen "$@"
+else
+    compdef _CommitGen CommitGen commitgen
+fi
