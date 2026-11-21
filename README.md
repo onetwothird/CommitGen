@@ -133,6 +133,11 @@ commitgen: groq failed (rate limit / quota reached), trying gemini
   fix(api): handle empty pagination cursor
 ```
 
+How failures are handled:
+
+- **Short rate limit** ("try again in 8s", the usual per-minute limit on free tiers): if only offline mode is left, CommitGen waits and retries, up to `max_wait` seconds (default 30). If another AI provider is available, it uses that instead.
+- **Long limit** (daily quota used up): the provider is paused until its reset time, then used again. During a long `--each` run, later commits go back to it automatically.
+- **Bad key, unknown model or no credit:** the provider is skipped for the rest of the run.
 - With `provider = "auto"` (the default), CommitGen uses every provider whose key it finds (`GROQ_API_KEY`, `GEMINI_API_KEY`, …), then a running Ollama, then `offline`.
 - `offline` is added at the end automatically unless you write your own `fallback` list without it.
 - Providers without a key are skipped, with a note telling you where to get one.
@@ -198,6 +203,34 @@ It can't know *why* you made a change, so add `-m "why"` or switch on AI for ric
 
 AI providers can write in any language: set `language = "Português"` in your config or pass `--lang`. Conventional Commit type keywords (`feat`, `fix` …) stay in English. Offline mode writes in English.
 
+## Get the most out of CommitGen
+
+1. **Use two or three free providers.** Each free tier has its own limit, and the fallback chain adds them up. Gemini, Groq and OpenRouter together go a long way, all free:
+
+   ```bash
+   commitgen setup groq        # add a key
+   commitgen setup gemini      # the last one you set up becomes the main provider;
+                               # providers that already have keys are offered as fallbacks
+   ```
+
+   Or put the keys in environment variables (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`). The default `provider = "auto"` uses them all.
+
+2. **Commit small, focused changes.** Smaller diffs give better messages, use fewer tokens and make a cleaner history. `git add -p` stages part of a file.
+
+3. **Say why with `-m`.** The diff shows *what* changed but not *why*: `commitgen -m "users were logged out on refresh"`.
+
+4. **Hook it into `git commit`.** `commitgen hook install` drafts a message in your editor whenever you run plain `git commit`.
+
+5. **Set project rules once.** A committed `.commitgen.toml` with `scopes`, `instructions` and `exclude` makes every teammate's messages consistent.
+
+6. **Batch commits without burning the quota.** `commitgen -a --each` makes one request per file. For big batches:
+   - preview first with `-p`
+   - lower `max_diff` (e.g. `4000`) so each request is small
+   - raise `max_wait` (e.g. `60`) to wait out per-minute limits instead of using offline messages
+   - or use `--offline` for routine files (lockfiles, config, renames) and save AI for real code changes
+
+7. **Review before you push.** `commitgen -c` opens your editor with the draft. AI and offline messages are both good starting points, not final truth.
+
 ## Configuration
 
 `commitgen setup` writes the config for you. To edit it by hand:
@@ -237,6 +270,7 @@ instructions = "Reference the Jira ticket from the branch name, e.g. PROJ-123."
 | `temperature` | `0.2` | Sampling temperature |
 | `timeout` | `60` | Request timeout in seconds |
 | `num_ctx` | `8192` | Ollama context window in tokens |
+| `max_wait` | `30` | Seconds to wait out a short rate limit before falling back to offline mode (`0` = never wait) |
 | `exclude` | — | Extra pathspecs left out of the diff (lockfiles, `dist/` and images are already skipped) |
 | `scopes` | — | Allowed Conventional Commit scopes |
 | `instructions` | — | Extra rules for the model |
@@ -317,6 +351,7 @@ Only if you use a hosted provider, and then only the filtered, secret-masked sta
 - Lower `max_diff` (for example `6000`).
 - Put two or three free providers in `fallback` so the quotas add up.
 - Avoid `-n 3` on free tiers: it makes three requests.
+- For `--each` on many files, raise `max_wait` so short per-minute limits are waited out instead of falling back to offline mode.
 </details>
 
 <details>

@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - **`commitgen setup`**: guided setup that picks a provider, saves the key, tests the connection and sets fallbacks.
 - **`commitgen providers`**: lists providers, cost and which keys are set.
 - Per-provider `<name>_api_key` and `<name>_model` config keys.
+- Smarter rate-limit handling: wait out short limits (`max_wait`, default 30 s) when only offline mode is left, pause a limited provider until it resets instead of dropping it for the whole run, and read the exact wait from messages like "Please try again in 7.5s".
 - Install scripts for macOS/Linux (`install.sh`) and Windows (`install.ps1`).
 - `CONTRIBUTING.md`, issue and pull request templates.
 
