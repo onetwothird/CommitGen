@@ -14,7 +14,14 @@ import (
 type Offline struct{}
 
 func (Offline) Generate(_ context.Context, r Request, on OnToken) (string, error) {
-	msg := heuristic.Generate(r.Diff, heuristic.Options{Style: r.Style, Scopes: r.Scopes, Hint: r.Hint})
+	var msg string
+	if r.Offline != nil {
+		msg = r.Offline()
+	} else {
+		msg = heuristic.Generate(r.Diff, heuristic.Options{
+			Style: r.Style, Scopes: r.Scopes, Hint: r.Hint, MaxSubject: r.MaxHeader, NoBreaking: r.NoBreaking,
+		})
+	}
 	if msg == "" {
 		return "", errors.New("offline: the diff has no files")
 	}

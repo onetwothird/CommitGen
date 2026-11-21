@@ -20,10 +20,16 @@ type Request struct {
 	MaxTokens   int
 
 	// Raw inputs, used by the offline (non-AI) generator.
-	Diff   string
-	Hint   string
-	Style  string
-	Scopes []string
+	Diff       string
+	Hint       string
+	Style      string
+	Scopes     []string
+	MaxHeader  int
+	NoBreaking bool
+
+	// Offline, when set, replaces the offline generator's output (used for
+	// replies that aren't commit messages, like pull request descriptions).
+	Offline func() string
 }
 
 type OnToken func(string)
