@@ -5,38 +5,42 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 type Config struct {
-	Provider     string   
-	BaseURL      string   
-	Model        string   
-	APIKey       string   
-	MaxDiff      int      
-	Temperature  float64  
-	Style        string   
-	Language     string   
-	Exclude      []string 
-	Scopes       []string 
-	Instructions string   
-	History      int      
-	Timeout      int      
-	NumCtx       int      
+	Provider     string            // preset name, "auto" or "offline"
+	BaseURL      string            // empty = the provider's default
+	Model        string            // empty = the provider's default
+	APIKey       string            // key for the main provider
+	Fallback     []string          // providers to try, in order, when the main one fails
+	Keys         map[string]string // <provider>_api_key entries
+	Models       map[string]string // <provider>_model entries
+	MaxDiff      int
+	Temperature  float64
+	Style        string
+	Language     string
+	Exclude      []string
+	Scopes       []string
+	Instructions string
+	History      int
+	Timeout      int
+	NumCtx       int
 }
 
 func Defaults() Config {
 	return Config{
-		Provider:    "openai",
-		BaseURL:     "http://localhost:11434/v1",
-		Model:       "qwen2.5-coder:7b",
+		Provider:    "auto",
+		Keys:        map[string]string{},
+		Models:      map[string]string{},
 		MaxDiff:     12000,
 		Temperature: 0.2,
 		Style:       "conventional",
 		Language:    "English",
 		History:     10,
-		Timeout:     120,
+		Timeout:     60,
 		NumCtx:      8192,
 	}
 }
@@ -79,16 +83,20 @@ func (c *Config) mergeEnv() {
 	set("COMMITGEN_API_KEY", &c.APIKey)
 	set("COMMITGEN_STYLE", &c.Style)
 	set("COMMITGEN_LANGUAGE", &c.Language)
-	if c.APIKey == "" {
-		switch c.Provider {
-		case "anthropic":
-			c.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-		default:
-			if strings.Contains(c.BaseURL, "openai.com") {
-				c.APIKey = os.Getenv("OPENAI_API_KEY")
-			}
+	if v := os.Getenv("COMMITGEN_FALLBACK"); v != "" {
+		c.Fallback = SplitList(v)
+	}
+}
+
+// SplitList splits "a, b,c" into ["a" "b" "c"].
+func SplitList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
 		}
 	}
+	return out
 }
 
 func (c *Config) mergeFile(path string) error {
@@ -143,8 +151,22 @@ func (c *Config) apply(key string, v value) error {
 		c.Exclude, err = v.list()
 	case "scopes":
 		c.Scopes, err = v.list()
+	case "fallback":
+		if v.isArr {
+			c.Fallback = v.arr
+		} else {
+			var s string
+			s, err = v.str()
+			c.Fallback = SplitList(s)
+		}
 	default:
-		return fmt.Errorf("unknown key")
+		if name, ok := strings.CutSuffix(key, "_api_key"); ok && name != "" {
+			c.Keys[name], err = v.str()
+		} else if name, ok := strings.CutSuffix(key, "_model"); ok && name != "" {
+			c.Models[name], err = v.str()
+		} else {
+			return fmt.Errorf("unknown key")
+		}
 	}
 	return err
 }
@@ -206,7 +228,7 @@ func parseTOML(f *os.File) (map[string]value, error) {
 		n++
 		line := strings.TrimSpace(stripComment(sc.Text()))
 		if line == "" || strings.HasPrefix(line, "[") && !strings.Contains(line, "=") {
-			continue 
+			continue
 		}
 		k, v, ok := strings.Cut(line, "=")
 		if !ok {
@@ -259,26 +281,99 @@ func splitArray(s string) []string {
 	return parts
 }
 
+// Set updates (or adds) top-level keys in a config file, keeping comments and
+// every other line. Values are written as TOML strings or arrays. A nil value
+// removes the key. The file is created with 0600 permissions since it may
+// hold API keys.
+func Set(path string, kv map[string]any) error {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if os.IsNotExist(err) {
+		data = []byte(Sample)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	done := map[string]bool{}
+	var out []string
+	for _, line := range lines {
+		t := strings.TrimSpace(stripComment(line))
+		k, _, ok := strings.Cut(t, "=")
+		k = strings.TrimSpace(k)
+		if v, managed := kv[k]; ok && managed {
+			if !done[k] && v != nil {
+				out = append(out, k+" = "+tomlValue(v))
+			}
+			done[k] = true
+			continue
+		}
+		out = append(out, line)
+	}
+	var keys []string
+	for k := range kv {
+		if !done[k] && kv[k] != nil {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out = append(out, k+" = "+tomlValue(kv[k]))
+	}
+	text := strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(text), 0o600)
+}
+
+func tomlValue(v any) string {
+	switch x := v.(type) {
+	case []string:
+		q := make([]string, len(x))
+		for i, s := range x {
+			q[i] = strconv.Quote(s)
+		}
+		return "[" + strings.Join(q, ", ") + "]"
+	case int:
+		return strconv.Itoa(x)
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	default:
+		return strconv.Quote(fmt.Sprint(x))
+	}
+}
+
 const Sample = `# commitgen config
 # Location: ` + "`commitgen config path`" + ` prints it. Per-repo overrides go in .commitgen.toml.
+# Easiest way to fill this in: run ` + "`commitgen setup`" + `.
 
-# Any OpenAI-compatible API. Default is a local Ollama server (private, free).
-provider = "openai"
-base_url = "http://localhost:11434/v1"
-model    = "qwen2.5-coder:7b"
+# Which provider writes the message. Run ` + "`commitgen providers`" + ` for the full list.
+#   auto     - use whatever is available (API keys in env, a running Ollama), else offline
+#   offline  - no AI, no key, no internet: rule-based message from the diff
+#   groq | gemini | openrouter | cerebras | mistral | github   (free tiers)
+#   ollama | lmstudio | llamacpp                                (local)
+#   openai | anthropic                                          (paid)
+provider = "auto"
 
-# Cloud examples:
-# base_url = "https://api.openai.com/v1"      # model = "gpt-4o-mini", key from OPENAI_API_KEY
-# base_url = "https://api.groq.com/openai/v1" # model = "openai/gpt-oss-20b"
-# provider = "anthropic"                      # model = "claude-haiku-4-5", key from ANTHROPIC_API_KEY
+# model    = ""        # empty = the provider's default
+# base_url = ""        # only for custom OpenAI-compatible servers
+
+# When the provider fails (rate limit, quota, no internet), try these next.
+# fallback = ["gemini", "offline"]
+
+# API keys: environment variables are safest (GROQ_API_KEY, GEMINI_API_KEY,
+# OPENROUTER_API_KEY, ...). You can also store them here, per provider:
+# groq_api_key   = "gsk_..."
+# gemini_api_key = "..."
+# gemini_model   = "gemini-flash-latest"
 
 style       = "conventional"   # or "simple"
 language    = "English"
-max_diff    = 12000            # characters of diff sent to the model
+max_diff    = 12000            # characters of diff sent to the model (smaller = fewer tokens used)
 history     = 10               # recent commit subjects used to match repo style
 temperature = 0.2
-timeout     = 120
-num_ctx     = 8192             # Ollama context window; raise it for big diffs if you have RAM
+timeout     = 60
+num_ctx     = 8192             # Ollama context window
 
 # exclude = ["docs/generated/*", "*.snap"]
 # scopes  = ["api", "ui", "cli"]
