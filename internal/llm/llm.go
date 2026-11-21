@@ -18,6 +18,12 @@ type Request struct {
 	Model       string
 	Temperature float64
 	MaxTokens   int
+
+	// Raw inputs, used by the offline (non-AI) generator.
+	Diff   string
+	Hint   string
+	Style  string
+	Scopes []string
 }
 
 type OnToken func(string)
@@ -27,56 +33,54 @@ type Provider interface {
 }
 
 type Options struct {
-	Provider string
+	Provider string // preset name or protocol: openai, anthropic, ollama, offline, groq, gemini, ...
 	BaseURL  string
 	APIKey   string
 	Timeout  time.Duration
-	NumCtx   int 
+	NumCtx   int
 }
 
 func IsOllama(base string) bool { return strings.Contains(base, ":11434") }
 
+// New builds a provider. Provider may be a preset name (groq, gemini, ...) or a
+// protocol (openai, anthropic, ollama, offline); an empty BaseURL means the
+// preset's default.
 func New(o Options) (Provider, error) {
 	client := &http.Client{Timeout: o.Timeout}
-	switch strings.ToLower(o.Provider) {
-	case "ollama":
-		return newOllama(o, client), nil
-	case "", "openai", "openai-compatible":
-		if IsOllama(o.BaseURL) {
-			return newOllama(o, client), nil
-		}
-		return &openAI{base: strings.TrimRight(o.BaseURL, "/"), key: o.APIKey, http: client}, nil
-	case "anthropic", "claude":
-		base := strings.TrimRight(o.BaseURL, "/")
-		if base == "" || strings.Contains(base, "localhost:11434") {
-			base = "https://api.anthropic.com"
+	name := o.Provider
+	if name == "" {
+		name = "openai"
+	}
+	pre, ok := Lookup(name)
+	if !ok {
+		return nil, fmt.Errorf("unknown provider %q (choose one of: %s)", o.Provider, strings.Join(Names(), ", "))
+	}
+	base := strings.TrimRight(o.BaseURL, "/")
+	if base == "" {
+		base = pre.BaseURL
+	}
+	switch pre.Kind {
+	case KindOffline:
+		return Offline{}, nil
+	case KindOllama:
+		return newOllama(base, o.NumCtx, client), nil
+	case KindAnthropic:
+		if IsOllama(base) {
+			base = pre.BaseURL
 		}
 		if o.APIKey == "" {
-			return nil, fmt.Errorf("anthropic provider needs an API key (set ANTHROPIC_API_KEY)")
+			return nil, &Error{Kind: ErrAuth, Base: base, Detail: "no API key set"}
 		}
 		return &anthropic{base: base, key: o.APIKey, http: client}, nil
+	default:
+		if IsOllama(base) {
+			return newOllama(base, o.NumCtx, client), nil
+		}
+		if pre.NeedsKey() && o.APIKey == "" && base == pre.BaseURL {
+			return nil, &Error{Kind: ErrAuth, Base: base, Detail: "no API key set"}
+		}
+		return &openAI{base: base, key: o.APIKey, http: client}, nil
 	}
-	return nil, fmt.Errorf("unknown provider %q (use \"openai\" or \"anthropic\")", o.Provider)
-}
-
-func httpError(resp *http.Response, base string) error {
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
-	msg := strings.TrimSpace(string(b))
-	hint := ""
-	switch resp.StatusCode {
-	case 401, 403:
-		hint = " (check your API key)"
-	case 404:
-		hint = " (check base_url and that the model exists — for Ollama run `ollama pull <model>`)"
-	}
-	return fmt.Errorf("%s returned HTTP %d%s: %s", base, resp.StatusCode, hint, msg)
-}
-
-func connError(err error, base string) error {
-	if strings.Contains(base, "localhost") || strings.Contains(base, "127.0.0.1") {
-		return fmt.Errorf("could not reach %s — is your local model server running? (e.g. `ollama serve`): %w", base, err)
-	}
-	return fmt.Errorf("request to %s failed: %w", base, err)
 }
 
 type openAI struct {
@@ -96,7 +100,9 @@ func (p *openAI) Generate(ctx context.Context, r Request, on OnToken) (string, e
 		},
 	}
 
-	if strings.Contains(strings.ToLower(r.Model), "gpt-oss") {
+	// Reasoning models spend tokens "thinking" before they answer; keep that
+	// short and leave room for the actual message.
+	if m := strings.ToLower(r.Model); strings.Contains(m, "gpt-oss") || strings.Contains(m, "gemini") {
 		payload["reasoning_effort"] = "low"
 		if r.MaxTokens < 2048 {
 			payload["max_tokens"] = 2048
@@ -160,13 +166,12 @@ type ollama struct {
 	http   *http.Client
 }
 
-func newOllama(o Options, c *http.Client) *ollama {
-	base := strings.TrimRight(o.BaseURL, "/")
-	base = strings.TrimSuffix(base, "/v1")
+func newOllama(base string, numCtx int, c *http.Client) *ollama {
+	base = strings.TrimSuffix(strings.TrimRight(base, "/"), "/v1")
 	if base == "" {
 		base = "http://localhost:11434"
 	}
-	n := o.NumCtx
+	n := numCtx
 	if n <= 0 {
 		n = 8192
 	}

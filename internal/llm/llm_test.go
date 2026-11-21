@@ -102,7 +102,7 @@ func TestOllamaAutoDetect(t *testing.T) {
 	if _, ok := p.(*ollama); !ok {
 		t.Errorf("expected native ollama provider, got %T", p)
 	}
-	p, _ = New(Options{Provider: "openai", BaseURL: "https://api.openai.com/v1"})
+	p, _ = New(Options{Provider: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "k"})
 	if _, ok := p.(*openAI); !ok {
 		t.Errorf("expected openai provider, got %T", p)
 	}
