@@ -23,8 +23,12 @@ $commitGenCompleter = {
     $commands = @(
         @('setup', 'Pick an AI provider (guided)'),
         @('providers', 'List providers, costs and keys'),
+        @('pr', 'Write a pull request title and description'),
+        @('changelog', 'Release notes since the last tag'),
+        @('reword', 'Rewrite bad messages of recent commits'),
         @('hook', 'Install or remove the git hook'),
         @('config', 'Show or create the config file'),
+        @('cache', 'Clear or locate saved messages'),
         @('completion', 'Print a shell completion script'),
         @('version', 'Print the version'),
         @('help', 'Show help')
@@ -46,7 +50,16 @@ $commitGenCompleter = {
         @('--url', 'OpenAI-compatible base URL'),
         @('--style', 'Message style'),
         @('--lang', 'Language of the message'),
-        @('--max', 'Max diff characters sent')
+        @('--max', 'Max diff characters sent'),
+        @('--no-cache', 'Do not reuse a saved message'),
+        @('--allow-secrets', 'Commit automatically even with a key in the diff'),
+        @('--base', 'pr: branch to merge into'),
+        @('--create', 'pr: open it with the GitHub CLI'),
+        @('--from', 'changelog: start of range'),
+        @('--to', 'changelog: end of range'),
+        @('--release', 'changelog: heading, e.g. v1.2.0'),
+        @('--full', 'changelog: every type; reword: every commit'),
+        @('--force', 'reword: allow pushed commits')
     )
     $languages = 'English', 'Spanish', 'Portuguese', 'French', 'German', 'Italian', 'Dutch', 'Japanese', 'Korean',
                  'Chinese', 'Filipino', 'Indonesian', 'Vietnamese', 'Russian', 'Turkish', 'Arabic', 'Hindi'
@@ -64,7 +77,8 @@ $commitGenCompleter = {
         '^--?style$' { @(@('conventional', 'type(scope): summary'), @('simple', 'Plain summary line')); break }
         '^--?lang$' { $languages | ForEach-Object { ,@($_, "Write the message in $_") }; break }
         '^-n$' { '2', '3', '4', '5' | ForEach-Object { ,@($_, "$_ candidates") }; break }
-        '^(--?model|--?url|--?max|-m)$' { @(); break }
+        '^--?(base|from|to)$' { @(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes refs/tags 2>$null) | ForEach-Object { ,@($_, $_) }; break }
+        '^(--?model|--?url|--?max|--?release|-m)$' { @(); break }
         default {
             switch ($first) {
                 'setup' { if ($words.Count -eq 1) { $providers } else { @() } }
@@ -74,6 +88,7 @@ $commitGenCompleter = {
                     else { @() }
                 }
                 'config' { if ($words.Count -eq 1) { @(@('init', 'Write a starter config'), @('path', 'Print the config path'), @('show', 'Show effective settings')) } else { @() } }
+                'cache' { if ($words.Count -eq 1) { @(@('clear', 'Forget saved messages'), @('path', 'Print the cache folder')) } else { @() } }
                 'completion' { if ($words.Count -eq 1) { 'bash', 'zsh', 'fish', 'powershell' | ForEach-Object { ,@($_, "$_ completion script") } } else { @() } }
                 { $_ -in 'providers', 'version', 'help' } { @() }
                 default {

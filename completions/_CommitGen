@@ -24,8 +24,12 @@ _CommitGen() {
     commands=(
         'setup:pick an AI provider (guided)'
         'providers:list providers, costs and keys'
+        'pr:write a pull request title and description'
+        'changelog:release notes since the last tag'
+        'reword:rewrite bad messages of recent commits'
         'hook:install or remove the git hook'
         'config:show or create the config file'
+        'cache:clear or locate saved messages'
         'completion:print a shell completion script'
         'version:print the version'
         'help:show help'
@@ -47,6 +51,9 @@ _CommitGen() {
         config)
             (( CURRENT == 3 )) && _values 'config command' init path show
             return ;;
+        cache)
+            (( CURRENT == 3 )) && _values 'cache command' clear path
+            return ;;
         completion)
             (( CURRENT == 3 )) && _values 'shell' bash zsh fish powershell
             return ;;
@@ -66,6 +73,15 @@ _CommitGen() {
         '--offline[no AI: rule-based message]' \
         '--dry-run[show what would be sent, then exit]' \
         '--no-redact[do not mask secrets]' \
+        '--no-cache[do not reuse a saved message]' \
+        '--allow-secrets[commit automatically even with a key in the diff]' \
+        '--base[pr: branch to merge into]:branch:->ref' \
+        '--create[pr: open it with the GitHub CLI]' \
+        '--from[changelog: start of range]:ref:->ref' \
+        '--to[changelog: end of range]:ref:->ref' \
+        '--release[changelog: heading, e.g. v1.2.0]:version: ' \
+        '--full[changelog: every type; reword: every commit]' \
+        '--force[reword: allow pushed commits]' \
         '--provider[provider for this run]:provider:->provider' \
         '--model[model name]:model: ' \
         '--url[OpenAI-compatible base URL]:url:_urls' \
@@ -74,6 +90,7 @@ _CommitGen() {
         '--max[max diff characters sent]:chars: '
 
     [[ $state == provider ]] && _describe -t providers 'provider' providers
+    [[ $state == ref ]] && compadd -- ${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes refs/tags 2>/dev/null)"}
 }
 
 if [[ $zsh_eval_context[-1] == loadautofunc ]]; then

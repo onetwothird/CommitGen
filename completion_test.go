@@ -47,8 +47,8 @@ func TestCompletionsListEveryFlag(t *testing.T) {
 }
 
 func TestCompletionsListEveryProviderAndCommand(t *testing.T) {
-	commands := []string{"setup", "providers", "hook", "config", "completion", "version", "help",
-		"install", "uninstall", "init", "path", "show", "conventional", "simple"}
+	commands := []string{"setup", "providers", "pr", "changelog", "reword", "hook", "config", "cache", "completion",
+		"version", "help", "install", "uninstall", "init", "path", "show", "clear", "conventional", "simple"}
 	for shell, script := range shells {
 		for _, p := range llm.Presets {
 			if !strings.Contains(script, p.Name) {

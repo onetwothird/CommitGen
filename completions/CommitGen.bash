@@ -8,9 +8,9 @@ _CommitGen() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local commands="setup providers hook config completion version help"
+    local commands="setup providers pr changelog reword hook config cache completion version help"
     local providers="offline gemini groq openrouter cerebras github mistral ollama lmstudio llamacpp openai anthropic"
-    local flags="-c -y -p -a -n -m -v --each --offline --dry-run --no-redact --provider --model --url --style --lang --max"
+    local flags="-c -y -p -a -n -m -v --each --offline --dry-run --no-redact --no-cache --allow-secrets --provider --model --url --style --lang --max --base --create --from --to --release --full --force"
 
     # values for flags that take an argument
     case "$prev" in
@@ -22,7 +22,9 @@ _CommitGen() {
             COMPREPLY=($(compgen -W "English Spanish Portuguese French German Italian Dutch Japanese Korean Chinese Filipino Indonesian Vietnamese Russian Turkish Arabic Hindi" -- "$cur")); return ;;
         -n)
             COMPREPLY=($(compgen -W "2 3 4 5" -- "$cur")); return ;;
-        --model|-model|--url|-url|--max|-max|-m)
+        --base|-base|--from|-from|--to|-to)
+            COMPREPLY=($(compgen -W "$(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes refs/tags 2>/dev/null)" -- "$cur")); return ;;
+        --model|-model|--url|-url|--max|-max|-m|--release|-release)
             return ;;  # free text
     esac
 
@@ -37,6 +39,8 @@ _CommitGen() {
                 return ;;
             config)
                 [ "$COMP_CWORD" -eq 2 ] && COMPREPLY=($(compgen -W "init path show" -- "$cur")); return ;;
+            cache)
+                [ "$COMP_CWORD" -eq 2 ] && COMPREPLY=($(compgen -W "clear path" -- "$cur")); return ;;
             completion)
                 [ "$COMP_CWORD" -eq 2 ] && COMPREPLY=($(compgen -W "bash zsh fish powershell" -- "$cur")); return ;;
             providers|version|help)
