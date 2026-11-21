@@ -4,7 +4,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 .PHONY: build test vet install release-snapshot clean
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o commitgen .
+	go build -ldflags "$(LDFLAGS)" -o CommitGen .
 
 test:
 	go test ./...
@@ -19,4 +19,4 @@ release-snapshot:
 	goreleaser release --snapshot --clean
 
 clean:
-	rm -rf commitgen commitgen.exe dist
+	rm -rf CommitGen CommitGen.exe dist
