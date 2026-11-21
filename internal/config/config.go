@@ -56,7 +56,31 @@ func UserConfigPath() string {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "commitgen", "config.toml")
+	return preferExisting(filepath.Join(dir, "CommitGen", "config.toml"), filepath.Join(dir, legacyName, "config.toml"))
+}
+
+// RepoConfigName is the per-repository config file.
+const RepoConfigName = ".CommitGen.toml"
+
+// legacyName is the lowercase name older versions used for config paths.
+const legacyName = "commitgen"
+
+// RepoConfigPath returns the repo config file, preferring .CommitGen.toml but
+// still reading a .CommitGen.toml written by older versions.
+func RepoConfigPath(repoRoot string) string {
+	return preferExisting(filepath.Join(repoRoot, RepoConfigName), filepath.Join(repoRoot, "."+legacyName+".toml"))
+}
+
+// preferExisting returns legacy only when it exists and current doesn't.
+// (On case-insensitive file systems both names are the same file.)
+func preferExisting(current, legacy string) string {
+	if _, err := os.Stat(current); err == nil {
+		return current
+	}
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return current
 }
 
 func Load(repoRoot string) (Config, error) {
@@ -65,7 +89,7 @@ func Load(repoRoot string) (Config, error) {
 		return c, err
 	}
 	if repoRoot != "" {
-		if err := c.mergeFile(filepath.Join(repoRoot, ".commitgen.toml")); err != nil {
+		if err := c.mergeFile(RepoConfigPath(repoRoot)); err != nil {
 			return c, err
 		}
 	}
@@ -347,11 +371,11 @@ func tomlValue(v any) string {
 	}
 }
 
-const Sample = `# commitgen config
-# Location: ` + "`commitgen config path`" + ` prints it. Per-repo overrides go in .commitgen.toml.
-# Easiest way to fill this in: run ` + "`commitgen setup`" + `.
+const Sample = `# CommitGen config
+# Location: ` + "`CommitGen config path`" + ` prints it. Per-repo overrides go in .CommitGen.toml.
+# Easiest way to fill this in: run ` + "`CommitGen setup`" + `.
 
-# Which provider writes the message. Run ` + "`commitgen providers`" + ` for the full list.
+# Which provider writes the message. Run ` + "`CommitGen providers`" + ` for the full list.
 #   auto     - use whatever is available (API keys in env, a running Ollama), else offline
 #   offline  - no AI, no key, no internet: rule-based message from the diff
 #   groq | gemini | openrouter | cerebras | mistral | github   (free tiers)
