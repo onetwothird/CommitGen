@@ -16,7 +16,7 @@ var DefaultExcludes = []string{
 }
 
 var (
-	ErrNothingStaged = errors.New("nothing is staged.\n  Stage files with `git add <file>` (or `git add -A` for everything),\n  or run `commitgen -a` to stage all changes and continue")
+	ErrNothingStaged = errors.New("nothing is staged.\n  Stage files with `git add <file>` (or `git add -A` for everything),\n  or run `CommitGen -a` to stage all changes and continue")
 	ErrNotRepo       = errors.New("not a git repository")
 	ErrNoGit         = errors.New("git not found")
 )
