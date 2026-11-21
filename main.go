@@ -24,25 +24,26 @@ import (
 
 var version = "dev"
 
-const usage = `commitgen — write commit messages from your staged diff
+const usage = `CommitGen — write commit messages from your staged diff
 
 Usage:
-  commitgen [flags]            generate a message for the staged changes
-  commitgen setup [provider]   pick an AI provider (free options) - start here
-  commitgen providers          list providers, costs and which keys are set
-  commitgen --offline          no AI, no key, no internet: rule-based message
-  commitgen -a --each          commit every changed file separately, automatically
-  commitgen hook install       draft messages automatically on ` + "`git commit`" + `
-  commitgen hook uninstall
-  commitgen config init        write a starter config file
-  commitgen config path|show
-  commitgen version
+  CommitGen [flags]            generate a message for the staged changes
+  CommitGen setup [provider]   pick an AI provider (free options) - start here
+  CommitGen providers          list providers, costs and which keys are set
+  CommitGen --offline          no AI, no key, no internet: rule-based message
+  CommitGen -a --each          commit every changed file separately, automatically
+  CommitGen hook install       draft messages automatically on ` + "`git commit`" + `
+  CommitGen hook uninstall
+  CommitGen config init        write a starter config file
+  CommitGen config path|show
+  CommitGen completion <shell> tab completion for bash, zsh, fish or powershell
+  CommitGen version
 
 Examples:
-  git add -A && commitgen      draft, then [c]ommit / [e]dit / [r]egenerate
-  commitgen -c -y              generate and commit in one go
-  commitgen -m "fixes #42"     give the model (or offline mode) a hint
-  commitgen --provider gemini  use another provider just this once
+  git add -A && CommitGen      draft, then [c]ommit / [e]dit / [r]egenerate
+  CommitGen -c -y              generate and commit in one go
+  CommitGen -m "fixes #42"     give the model (or offline mode) a hint
+  CommitGen --provider gemini  use another provider just this once
 
 Flags:
 `
@@ -68,18 +69,27 @@ func main() {
 			exit(setupCmd(args[1:]))
 		case "providers", "provider":
 			exit(providersCmd())
+		case "completion", "completions":
+			exit(completionCmd(args[1:]))
 		case "version":
-			fmt.Println("commitgen", version)
+			fmt.Println("CommitGen", version)
 			return
 		case "help":
 			args = []string{"-h"}
 		default:
-			exit(fmt.Errorf("unknown command %q (see commitgen -h)", args[0]))
+			exit(fmt.Errorf("unknown command %q (see CommitGen -h)", args[0]))
 		}
 	}
 
 	var f flags
-	fs := flag.NewFlagSet("commitgen", flag.ExitOnError)
+	newFlagSet(&f).Parse(args)
+	exit(generateCmd(f))
+}
+
+// newFlagSet defines every flag. The completion scripts are tested against
+// this list, so new flags must be added there too.
+func newFlagSet(f *flags) *flag.FlagSet {
+	fs := flag.NewFlagSet("CommitGen", flag.ExitOnError)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage); fs.PrintDefaults() }
 	fs.BoolVar(&f.commit, "c", false, "commit with the generated message (opens your editor to review)")
 	fs.BoolVar(&f.yes, "y", false, "with -c: commit immediately, skip the editor")
@@ -91,7 +101,7 @@ func main() {
 	fs.StringVar(&f.hint, "m", "", "extra context for the model, e.g. -m \"fixes login bug #42\"")
 	fs.StringVar(&f.model, "model", "", "model name (overrides config)")
 	fs.StringVar(&f.url, "url", "", "OpenAI-compatible base URL (overrides config)")
-	fs.StringVar(&f.provider, "provider", "", "provider for this run: groq, gemini, openrouter, ollama, offline, ... (see `commitgen providers`)")
+	fs.StringVar(&f.provider, "provider", "", "provider for this run: groq, gemini, openrouter, ollama, offline, ... (see `CommitGen providers`)")
 	fs.BoolVar(&f.offline, "offline", false, "no AI: build the message from the diff with rules (no key, no internet)")
 	fs.StringVar(&f.style, "style", "", "conventional | simple (overrides config)")
 	fs.StringVar(&f.lang, "lang", "", "language of the message (overrides config)")
@@ -99,14 +109,12 @@ func main() {
 	fs.BoolVar(&f.each, "each", false, "commit every staged file separately, each with its own message (automatic)")
 	fs.BoolVar(&f.all, "a", false, "stage all changes first (like git add -A)")
 	fs.StringVar(&f.hook, "hook", "", "internal: write message into this file (used by the git hook)")
-	fs.Parse(args)
-
-	exit(generateCmd(f))
+	return fs
 }
 
 func exit(err error) {
 	if err = friendly(err); err != nil {
-		fmt.Fprintln(os.Stderr, "commitgen:", err)
+		fmt.Fprintln(os.Stderr, "CommitGen:", err)
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -173,7 +181,7 @@ func (s *session) request() (llm.Request, string, error) {
 		var n int
 		diff, n = redact.Secrets(diff)
 		if n > 0 {
-			fmt.Fprintf(os.Stderr, "commitgen: masked %d possible secret(s) before sending\n", n)
+			fmt.Fprintf(os.Stderr, "CommitGen: masked %d possible secret(s) before sending\n", n)
 		}
 	}
 	in := prompt.Input{
@@ -182,7 +190,7 @@ func (s *session) request() (llm.Request, string, error) {
 		Instructions: s.cfg.Instructions, Hint: s.f.hint, MaxDiff: s.cfg.MaxDiff,
 	}
 	if s.f.verbose {
-		fmt.Fprintf(os.Stderr, "commitgen: providers: %s (%d diff chars)\n", describe(s.targets), len(diff))
+		fmt.Fprintf(os.Stderr, "CommitGen: providers: %s (%d diff chars)\n", describe(s.targets), len(diff))
 	}
 	return llm.Request{
 		System: prompt.System(in), User: prompt.User(in),
@@ -201,14 +209,14 @@ func (s *session) generate(req llm.Request, stat string, n int) ([]string, error
 			continue
 		}
 		if s.f.verbose {
-			fmt.Fprintf(os.Stderr, "commitgen: model reply was not a commit message, asking it to rewrite:\n%s\n", m)
+			fmt.Fprintf(os.Stderr, "CommitGen: model reply was not a commit message, asking it to rewrite:\n%s\n", m)
 		}
 		fix := req
 		fix.User = prompt.RepairUser(m, stat, s.cfg.Style)
 		if fixed, err := generateN(s.ctx, s.p, fix, 1, s.label()); err == nil && prompt.Valid(fixed[0], s.cfg.Style) {
 			msgs[i] = fixed[0]
 		} else {
-			fmt.Fprintln(os.Stderr, "commitgen: warning: the model's reply doesn't look like a commit message.\n"+
+			fmt.Fprintln(os.Stderr, "CommitGen: warning: the model's reply doesn't look like a commit message.\n"+
 				"  Tips: stage fewer files at a time, add context with -m \"...\", or try a larger model (--model).")
 		}
 	}
@@ -251,7 +259,7 @@ func (s *session) firstRunTip() {
 	if s.f.hook == "" && !s.f.dryRun && len(s.targets) == 1 && s.targets[0].name == "offline" &&
 		mainProvider(s.cfg) == "auto" && !fileExists(config.UserConfigPath()) {
 		warn("no AI provider set up yet, so using offline mode (rule-based).\n" +
-			"  For AI-written messages run `commitgen setup` - free options are available.")
+			"  For AI-written messages run `CommitGen setup` - free options are available.")
 	}
 }
 
@@ -298,7 +306,7 @@ func generateCmd(f flags) error {
 	if f.hook != "" {
 		msgs, err := gen(1)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "commitgen: skipped —", err)
+			fmt.Fprintln(os.Stderr, "CommitGen: skipped —", err)
 			return nil
 		}
 		existing, _ := os.ReadFile(f.hook)
@@ -379,7 +387,7 @@ func generateN(ctx context.Context, p llm.Provider, req llm.Request, n int, labe
 }
 
 func commit(msg string, edit bool) error {
-	tmp, err := os.CreateTemp("", "commitgen-*.txt")
+	tmp, err := os.CreateTemp("", "CommitGen-*.txt")
 	if err != nil {
 		return err
 	}
@@ -454,21 +462,21 @@ func spinner(label string) func() {
 	return func() { close(done); wg.Wait() }
 }
 
-const hookMarker = "# installed by commitgen"
+const hookMarker = "# installed by CommitGen"
 
 const hookScript = `#!/bin/sh
 ` + hookMarker + `
-# Drafts a commit message with commitgen when you run plain ` + "`git commit`" + `.
-# Skipped for merges, amends, -m messages, templates, and commitgen's own commits.
+# Drafts a commit message with CommitGen when you run plain ` + "`git commit`" + `.
+# Skipped for merges, amends, -m messages, templates, and CommitGen's own commits.
 [ -n "$COMMITGEN_SKIP_HOOK" ] && exit 0
 case "$2" in merge|squash|commit|message|template) exit 0 ;; esac
-cg=$(command -v commitgen || command -v CommitGen) || exit 0
+cg=$(command -v CommitGen || command -v commitgen) || exit 0
 "$cg" --hook "$1" </dev/null || true
 `
 
 func hookCmd(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: commitgen hook install|uninstall [--force]")
+		return errors.New("usage: CommitGen hook install|uninstall [--force]")
 	}
 	gitDir, err := git.GitDir()
 	if err != nil {
@@ -477,12 +485,13 @@ func hookCmd(args []string) error {
 	path := filepath.Join(gitDir, "hooks", "prepare-commit-msg")
 	force := len(args) > 1 && args[1] == "--force"
 	existing, readErr := os.ReadFile(path)
-	ours := readErr == nil && strings.Contains(string(existing), hookMarker)
+	// Hooks from older versions say "installed by commitgen".
+	ours := readErr == nil && strings.Contains(strings.ToLower(string(existing)), strings.ToLower(hookMarker))
 
 	switch args[0] {
 	case "install":
 		if readErr == nil && !ours && !force {
-			return fmt.Errorf("%s already exists and was not created by commitgen (use --force to overwrite)", path)
+			return fmt.Errorf("%s already exists and was not created by CommitGen (use --force to overwrite)", path)
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
@@ -491,7 +500,7 @@ func hookCmd(args []string) error {
 			return err
 		}
 		fmt.Println("installed", path)
-		fmt.Println("now just run `git commit` — commitgen drafts the message in your editor.")
+		fmt.Println("now just run `git commit` — CommitGen drafts the message in your editor.")
 		return nil
 	case "uninstall":
 		if readErr != nil {
@@ -499,7 +508,7 @@ func hookCmd(args []string) error {
 			return nil
 		}
 		if !ours && !force {
-			return fmt.Errorf("%s was not created by commitgen (use --force to remove)", path)
+			return fmt.Errorf("%s was not created by CommitGen (use --force to remove)", path)
 		}
 		if err := os.Remove(path); err != nil {
 			return err
@@ -538,7 +547,7 @@ func configCmd(args []string) error {
 		}
 		note := ""
 		if !fileExists(path) {
-			note = " (not created yet - run `commitgen setup`)"
+			note = " (not created yet - run `CommitGen setup`)"
 		}
 		targets, skipped := resolve(c)
 		fmt.Printf("config file: %s%s\nprovider:    %s\nwill try:    %s\nstyle:       %s\nlanguage:    %s\nmax_diff:    %d\nhistory:     %d\ntimeout:     %ds\nmax_wait:    %ds\n",
@@ -577,7 +586,7 @@ func eachCmd(s *session) error {
 	}
 
 	s.firstRunTip()
-	fmt.Fprintf(os.Stderr, "commitgen: %d file(s) staged, committing one by one\n", len(files))
+	fmt.Fprintf(os.Stderr, "CommitGen: %d file(s) staged, committing one by one\n", len(files))
 	done := 0
 	for i, file := range files {
 		if err := git.ResetIndex(); err != nil {
@@ -615,7 +624,7 @@ func eachCmd(s *session) error {
 }
 
 func commitQuiet(msg string) error {
-	tmp, err := os.CreateTemp("", "commitgen-*.txt")
+	tmp, err := os.CreateTemp("", "CommitGen-*.txt")
 	if err != nil {
 		return err
 	}
