@@ -17,20 +17,39 @@ type Input struct {
 	Instructions string
 	Hint         string
 	MaxDiff      int
+	Types        []string // allowed types (from commitlint); empty = the standard ones
+	MaxHeader    int      // max first-line length (from commitlint); 0 = 72
+	Original     string   // the commit's current message, when rewording
+}
+
+// DefaultTypes are the Conventional Commits types CommitGen uses.
+var DefaultTypes = []string{"feat", "fix", "refactor", "perf", "docs", "test", "build", "ci", "chore", "style", "revert"}
+
+func (in Input) maxHeader() int {
+	if in.MaxHeader > 0 && in.MaxHeader < 72 {
+		return in.MaxHeader
+	}
+	return 72
 }
 
 func System(in Input) string {
 	var b strings.Builder
 	b.WriteString("You are an expert software engineer who writes precise git commit messages.\n\nRules:\n")
+	max := in.maxHeader()
 	if in.Style == "simple" {
-		b.WriteString("- First line: a concise summary in imperative mood (\"Add\", \"Fix\", not \"Added\"), max 72 characters, no trailing period.\n")
+		fmt.Fprintf(&b, "- First line: a concise summary in imperative mood (\"Add\", \"Fix\", not \"Added\"), max %d characters, no trailing period.\n", max)
 	} else {
+		types := in.Types
+		if len(types) == 0 {
+			types = DefaultTypes
+		}
 		b.WriteString("- Use Conventional Commits. First line: <type>(<optional scope>): <summary>\n")
-		b.WriteString("- Allowed types: feat, fix, refactor, perf, docs, test, build, ci, chore, style, revert.\n")
-		b.WriteString("- Summary in imperative mood, lowercase start, max 72 characters total, no trailing period.\n")
+		fmt.Fprintf(&b, "- Allowed types: %s.\n", strings.Join(types, ", "))
+		fmt.Fprintf(&b, "- Summary in imperative mood, lowercase start, max %d characters total, no trailing period.\n", max)
 		if len(in.Scopes) > 0 {
 			fmt.Fprintf(&b, "- Scope, if used, must be one of: %s.\n", strings.Join(in.Scopes, ", "))
 		}
+		b.WriteString("- If the change breaks backwards compatibility (removes or changes public API, config, CLI flags or behaviour users rely on), add `!` before the colon and a footer line `BREAKING CHANGE: <what breaks>`. Otherwise do not.\n")
 	}
 	b.WriteString("- If the change is non-trivial, add a body after one blank line: short bullet points (\"- \") explaining WHAT changed and WHY. Wrap at 72 characters.\n")
 	b.WriteString("- Do not describe every file. Focus on intent. Never invent changes that are not in the diff.\n")
@@ -51,6 +70,9 @@ func User(in Input) string {
 	}
 	if in.Branch != "" {
 		fmt.Fprintf(&b, "Branch: %s\n\n", in.Branch)
+	}
+	if in.Original != "" {
+		fmt.Fprintf(&b, "The commit's current message (rewrite it so it describes the diff; keep any issue references):\n%s\n\n", indentLines(in.Original))
 	}
 	if len(in.History) > 0 {
 		b.WriteString("Recent commit subjects in this repo (match their style):\n")
@@ -74,6 +96,10 @@ func User(in Input) string {
 		b.WriteString("Reply with ONLY the commit message. The first line MUST look like `type(scope): summary`, for example `feat(auth): add password reset`. Do not describe or explain the diff.\n")
 	}
 	return b.String()
+}
+
+func indentLines(s string) string {
+	return "  " + strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n  ")
 }
 
 func RepairUser(bad, stat string, style string) string {

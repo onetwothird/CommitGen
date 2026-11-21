@@ -81,3 +81,35 @@ func TestUserEndsWithTask(t *testing.T) {
 		t.Error("task instruction must come after the diff")
 	}
 }
+
+func TestSystemUsesCommitlintRules(t *testing.T) {
+	s := System(Input{Style: "conventional", Types: []string{"feat", "fix", "wip"}, MaxHeader: 50})
+	if !strings.Contains(s, "Allowed types: feat, fix, wip.") || !strings.Contains(s, "max 50 characters") {
+		t.Errorf("commitlint rules missing:\n%s", s)
+	}
+	if !strings.Contains(System(Input{}), "Allowed types: feat, fix, refactor") {
+		t.Error("default types missing")
+	}
+}
+
+func TestUserIncludesOriginalMessage(t *testing.T) {
+	u := User(Input{Diff: "x", Original: "wip\n\nmore"})
+	if !strings.Contains(u, "current message") || !strings.Contains(u, "  wip\n  \n  more") {
+		t.Errorf("original message missing:\n%s", u)
+	}
+}
+
+func TestSplitTitle(t *testing.T) {
+	cases := map[string][2]string{
+		"feat(x): add y\n\n## Summary\nAdds y.":                            {"feat(x): add y", "## Summary\nAdds y."},
+		"Here is the pull request description:\nTitle: fix: crash\n\nBody": {"fix: crash", "Body"},
+		"```markdown\n# feat: add z\n\n## Summary\nz\n```":                 {"feat: add z", "## Summary\nz"},
+		"<think>hmm</think>**fix: typo**\n\nBody":                          {"fix: typo", "Body"},
+	}
+	for in, want := range cases {
+		title, body := SplitTitle(in)
+		if title != want[0] || body != want[1] {
+			t.Errorf("SplitTitle(%q) = %q, %q; want %q, %q", in, title, body, want[0], want[1])
+		}
+	}
+}
