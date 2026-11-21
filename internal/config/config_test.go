@@ -29,7 +29,7 @@ exclude = ["*.snap", 'docs/*']
 `), 0o644)
 	repo := filepath.Join(dir, "repo")
 	os.Mkdir(repo, 0o755)
-	os.WriteFile(filepath.Join(repo, ".commitgen.toml"), []byte(`scopes = ["api", "ui"]
+	os.WriteFile(filepath.Join(repo, ".CommitGen.toml"), []byte(`scopes = ["api", "ui"]
 style = "simple"`), 0o644)
 
 	t.Setenv("COMMITGEN_CONFIG", user)
@@ -114,7 +114,7 @@ func TestSetKeepsCommentsAndRoundTrips(t *testing.T) {
 	if strings.Count(text, "provider = ") != 1 || strings.Contains(text, `gemini_api_key = "abc"`) {
 		t.Errorf("file:\n%s", text)
 	}
-	if !strings.Contains(text, "# commitgen config") {
+	if !strings.Contains(text, "# CommitGen config") {
 		t.Error("comments from the sample were lost")
 	}
 	t.Setenv("COMMITGEN_CONFIG", f)
@@ -134,5 +134,19 @@ func TestSampleLoads(t *testing.T) {
 	t.Setenv("COMMITGEN_CONFIG", f)
 	if _, err := Load(""); err != nil {
 		t.Errorf("sample config does not parse: %v", err)
+	}
+}
+
+func TestLegacyLowercaseRepoConfigStillRead(t *testing.T) {
+	clean(t)
+	t.Setenv("COMMITGEN_CONFIG", filepath.Join(t.TempDir(), "none.toml"))
+	repo := t.TempDir()
+	os.WriteFile(filepath.Join(repo, ".commitgen.toml"), []byte(`style = "simple"`), 0o644)
+	c, err := Load(repo)
+	if err != nil || c.Style != "simple" {
+		t.Errorf("legacy .commitgen.toml not read: %v %+v", err, c.Style)
+	}
+	if got := filepath.Base(RepoConfigPath(t.TempDir())); got != RepoConfigName {
+		t.Errorf("new repos should use %s, got %s", RepoConfigName, got)
 	}
 }
