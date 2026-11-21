@@ -15,3 +15,6 @@ jobs:
           cache: false
       - run: go vet ./...
       - run: go test ./...
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
