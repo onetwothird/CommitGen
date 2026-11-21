@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit reviews every pull request to CommitGen automatically.
+# Reply to its comments, or write "@coderabbitai review" to ask for a new review.
+# Options: https://docs.coderabbit.ai/reference/configuration
+
+language: en-US
+
+reviews:
+  profile: chill            # fewer nitpicks; "assertive" for stricter reviews
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!dist/**"
+    - "!**/*.exe"
+  path_instructions:
+    - path: "**/*.go"
+      instructions: |
+        CommitGen is a Go 1.22 CLI with no third-party dependencies; flag any new
+        import outside the standard library. Code must pass gofmt and go vet.
+        Errors shown to users should say what went wrong and how to fix it.
+        Never log, print or send API keys.
+    - path: "**/*_test.go"
+      instructions: |
+        Tests must not need real API keys, network access or a local model.
+        They should use httptest servers. Key-shaped test strings must be built
+        at run time from pieces (see fake() in internal/redact/redact_test.go),
+        never written as one literal, or GitHub push protection blocks the push.
+    - path: "internal/llm/presets.go"
+      instructions: |
+        A new provider must also be added to setupChoices in setup.go, the
+        provider table in README.md and all four scripts in completions/.
+    - path: "completions/**"
+      instructions: |
+        Keep bash, zsh, fish and PowerShell scripts in sync with each other and
+        with the flags in main.go. They must register both CommitGen and commitgen.
+    - path: "internal/redact/**"
+      instructions: |
+        Secret masking is security-sensitive. Check new patterns for false
+        negatives on real key formats and for overly broad matches.
+
+chat:
+  auto_reply: true
