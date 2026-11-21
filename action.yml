@@ -19,8 +19,10 @@ inputs:
 outputs:
   text:
     description: The generated Markdown.
+    value: ${{ steps.run.outputs.text }}
   file:
     description: Path of a file with the same Markdown.
+    value: ${{ steps.run.outputs.file }}
 
 runs:
   using: composite
