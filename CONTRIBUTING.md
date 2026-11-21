@@ -8,18 +8,18 @@ Thanks for helping. CommitGen aims to be useful to every developer, including pe
 git clone https://github.com/onetwothird/CommitGen.git
 cd CommitGen
 go test ./...
-go build -o commitgen .
-./commitgen --offline -p     # try it on your own staged changes
+go build -o CommitGen .
+./CommitGen --offline -p     # try it on your own staged changes
 ```
 
 You need Go 1.22 or newer and git. The project has **no third-party dependencies**; please keep it that way.
 
 ## Ways to help
 
-- **Add a provider.** Most hosted APIs are OpenAI-compatible, so a new provider is one entry in [`internal/llm/presets.go`](internal/llm/presets.go): name, base URL, default model, key env vars and the page where users get a key. Add it to `setupChoices` in [`setup.go`](setup.go) and to the provider table in the README.
+- **Add a provider.** Most hosted APIs are OpenAI-compatible, so a new provider is one entry in [`internal/llm/presets.go`](internal/llm/presets.go): name, base URL, default model, key env vars and the page where users get a key. Add it to `setupChoices` in [`setup.go`](setup.go), to the provider table in the README, and to the four scripts in [`completions/`](completions) (a test fails until you do).
 - **Improve offline mode.** [`internal/heuristic`](internal/heuristic) decides the commit type, scope and summary. Support for more programming languages (function/class detection in `symbolRes`) and better file classification are very welcome. Add a test case for every rule you change.
 - **Docs and translations.** Clearer setup steps, troubleshooting entries and examples help the most people.
-- **Bug reports.** Use the issue templates. Include `commitgen version`, your OS, `commitgen config show` (it never prints keys) and the exact error.
+- **Bug reports.** Use the issue templates. Include `CommitGen version`, your OS, `CommitGen config show` (it never prints keys) and the exact error.
 
 ## Pull requests
 
@@ -32,6 +32,8 @@ You need Go 1.22 or newer and git. The project has **no third-party dependencies
    go vet ./...
    go test ./...
    ```
+
+   New flag? Add it to every script in `completions/` too; `TestCompletionsListEveryFlag` checks this.
 
 4. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:` …). CommitGen can write them for you.
 5. Open a pull request describing what changed and why.
