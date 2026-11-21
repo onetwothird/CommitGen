@@ -547,9 +547,12 @@ func limit(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	cut := strings.LastIndex(s[:n-1], " ")
+	if n <= 3 {
+		return s[:n]
+	}
+	cut := strings.LastIndex(s[:n-3], " ")
 	if cut < n/2 {
-		cut = n - 1
+		cut = n - 3
 	}
 	return strings.TrimRight(s[:cut], " ,") + "..."
 }
