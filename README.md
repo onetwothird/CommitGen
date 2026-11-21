@@ -23,7 +23,7 @@
 
 ```console
 $ git add -A
-$ commitgen
+$ CommitGen
 
   feat(auth): add refresh token rotation
 
@@ -59,13 +59,13 @@ irm https://raw.githubusercontent.com/onetwothird/CommitGen/main/install.ps1 | i
 go install github.com/onetwothird/CommitGen@latest
 ```
 
-> `go install` names the binary `CommitGen`. On Windows `commitgen` works too. On macOS and Linux, type `CommitGen`, or add `alias commitgen=CommitGen` to your shell profile.
+> `go install` names the binary `CommitGen`. On Windows `CommitGen` works too. On macOS and Linux, type `CommitGen`, or add `alias CommitGen=CommitGen` to your shell profile.
 
 **2. Use it.** Inside any git repository:
 
 ```bash
 git add -A
-commitgen
+CommitGen
 ```
 
 That's it. With nothing set up, CommitGen uses **offline mode**: rule-based, instant and private.
@@ -73,14 +73,14 @@ That's it. With nothing set up, CommitGen uses **offline mode**: rule-based, ins
 **3. Optional: turn on AI** (free options, about a minute):
 
 ```bash
-commitgen setup
+CommitGen setup
 ```
 
 The wizard lists the providers, shows where to get a free key, tests the connection and saves everything. Not sure which to pick? Choose **Gemini**: it's free, needs no credit card and runs on any PC.
 
 ## Choosing a provider
 
-Run `commitgen providers` to see this list with the keys you already have.
+Run `CommitGen providers` to see this list with the keys you already have.
 
 | Provider | Cost | Speed | Runs on | Needs | Best for |
 |---|---|---|---|---|---|
@@ -115,7 +115,7 @@ You don't need a strong computer:
 
   ```bash
   ollama pull qwen2.5-coder:1.5b
-  commitgen setup ollama
+  CommitGen setup ollama
   ```
 
 ### Fallback chain
@@ -128,8 +128,8 @@ fallback = ["gemini", "openrouter", "offline"]
 ```
 
 ```console
-$ commitgen
-commitgen: groq failed (rate limit / quota reached), trying gemini
+$ CommitGen
+CommitGen: groq failed (rate limit / quota reached), trying gemini
   fix(api): handle empty pagination cursor
 ```
 
@@ -145,12 +145,13 @@ How failures are handled:
 ## Usage
 
 ```text
-commitgen [flags]              generate a message for the staged changes
-commitgen setup [provider]     guided setup (key, model, test, fallback)
-commitgen providers            list providers, costs and which keys are set
-commitgen hook install|uninstall
-commitgen config init|path|show
-commitgen version
+CommitGen [flags]              generate a message for the staged changes
+CommitGen setup [provider]     guided setup (key, model, test, fallback)
+CommitGen providers            list providers, costs and which keys are set
+CommitGen hook install|uninstall
+CommitGen config init|path|show
+CommitGen completion bash|zsh|fish|powershell
+CommitGen version
 ```
 
 | Flag | Description |
@@ -176,17 +177,17 @@ commitgen version
 ### Examples
 
 ```bash
-commitgen                          # draft, then commit / edit / regenerate
-commitgen -c -y                    # generate and commit in one step
-commitgen -a --each                # one commit per changed file
-commitgen -a --each -p             # preview those messages, commit nothing
-commitgen -n 3                     # pick from three candidates
-commitgen -m "fixes #42"           # give the model a hint
-commitgen --offline -m "fix login" # instant, no AI: "fix(auth): fix login"
-commitgen --provider ollama        # one-off local run
-commitgen --lang Japanese          # write the message in Japanese
-commitgen hook install             # plain `git commit` now drafts the message
-git config --global alias.ai '!commitgen -c'   # then: git ai
+CommitGen                          # draft, then commit / edit / regenerate
+CommitGen -c -y                    # generate and commit in one step
+CommitGen -a --each                # one commit per changed file
+CommitGen -a --each -p             # preview those messages, commit nothing
+CommitGen -n 3                     # pick from three candidates
+CommitGen -m "fixes #42"           # give the model a hint
+CommitGen --offline -m "fix login" # instant, no AI: "fix(auth): fix login"
+CommitGen --provider ollama        # one-off local run
+CommitGen --lang Japanese          # write the message in Japanese
+CommitGen hook install             # plain `git commit` now drafts the message
+git config --global alias.ai '!CommitGen -c'   # then: git ai
 ```
 
 ### Offline mode
@@ -203,13 +204,35 @@ It can't know *why* you made a change, so add `-m "why"` or switch on AI for ric
 
 AI providers can write in any language: set `language = "Português"` in your config or pass `--lang`. Conventional Commit type keywords (`feat`, `fix` …) stay in English. Offline mode writes in English.
 
+### Tab completion
+
+Press Tab to complete commands, flags, provider names, styles and languages (`CommitGen --provider gem` → `gemini`). Set it up once for your shell, then open a new terminal:
+
+```powershell
+# PowerShell (Windows)
+Add-Content $PROFILE 'CommitGen completion powershell | Out-String | Invoke-Expression'
+```
+
+```bash
+# Bash
+echo 'source <(CommitGen completion bash)' >> ~/.bashrc
+
+# Zsh
+echo 'source <(CommitGen completion zsh)' >> ~/.zshrc
+
+# Fish
+CommitGen completion fish > ~/.config/fish/completions/CommitGen.fish
+```
+
+The scripts are also in [`completions/`](completions) and in every release archive, if you'd rather install them as files.
+
 ## Get the most out of CommitGen
 
 1. **Use two or three free providers.** Each free tier has its own limit, and the fallback chain adds them up. Gemini, Groq and OpenRouter together go a long way, all free:
 
    ```bash
-   commitgen setup groq        # add a key
-   commitgen setup gemini      # the last one you set up becomes the main provider;
+   CommitGen setup groq        # add a key
+   CommitGen setup gemini      # the last one you set up becomes the main provider;
                                # providers that already have keys are offered as fallbacks
    ```
 
@@ -217,31 +240,31 @@ AI providers can write in any language: set `language = "Português"` in your co
 
 2. **Commit small, focused changes.** Smaller diffs give better messages, use fewer tokens and make a cleaner history. `git add -p` stages part of a file.
 
-3. **Say why with `-m`.** The diff shows *what* changed but not *why*: `commitgen -m "users were logged out on refresh"`.
+3. **Say why with `-m`.** The diff shows *what* changed but not *why*: `CommitGen -m "users were logged out on refresh"`.
 
-4. **Hook it into `git commit`.** `commitgen hook install` drafts a message in your editor whenever you run plain `git commit`.
+4. **Hook it into `git commit`.** `CommitGen hook install` drafts a message in your editor whenever you run plain `git commit`.
 
-5. **Set project rules once.** A committed `.commitgen.toml` with `scopes`, `instructions` and `exclude` makes every teammate's messages consistent.
+5. **Set project rules once.** A committed `.CommitGen.toml` with `scopes`, `instructions` and `exclude` makes every teammate's messages consistent.
 
-6. **Batch commits without burning the quota.** `commitgen -a --each` makes one request per file. For big batches:
+6. **Batch commits without burning the quota.** `CommitGen -a --each` makes one request per file. For big batches:
    - preview first with `-p`
    - lower `max_diff` (e.g. `4000`) so each request is small
    - raise `max_wait` (e.g. `60`) to wait out per-minute limits instead of using offline messages
    - or use `--offline` for routine files (lockfiles, config, renames) and save AI for real code changes
 
-7. **Review before you push.** `commitgen -c` opens your editor with the draft. AI and offline messages are both good starting points, not final truth.
+7. **Review before you push.** `CommitGen -c` opens your editor with the draft. AI and offline messages are both good starting points, not final truth.
 
 ## Configuration
 
-`commitgen setup` writes the config for you. To edit it by hand:
+`CommitGen setup` writes the config for you. To edit it by hand:
 
 ```bash
-commitgen config path    # where the global config lives
-commitgen config init    # write a commented starter file
-commitgen config show    # effective settings and the provider chain
+CommitGen config path    # where the global config lives
+CommitGen config init    # write a commented starter file
+CommitGen config show    # effective settings and the provider chain
 ```
 
-Add a `.commitgen.toml` to a repository to set project rules (commit it so your team shares them):
+Add a `.CommitGen.toml` to a repository to set project rules (commit it so your team shares them):
 
 ```toml
 style        = "conventional"
@@ -250,7 +273,7 @@ exclude      = ["*.snap", "docs/generated/*"]
 instructions = "Reference the Jira ticket from the branch name, e.g. PROJ-123."
 ```
 
-**Precedence:** defaults → global config → repo `.commitgen.toml` → environment variables → flags.
+**Precedence:** defaults → global config → repo `.CommitGen.toml` → environment variables → flags.
 
 ### All options
 
@@ -301,22 +324,22 @@ setx GEMINI_API_KEY "your_key"
 On Windows, `setx` only affects terminals opened **after** it runs. In VS Code, quit and reopen the whole app. To use the value in the current window right away: `$env:GEMINI_API_KEY = "your_key"`.
 </details>
 
-> **Keep keys secret.** Don't paste them into issues, screenshots or commits. Keys saved by `commitgen setup` go in your user config file (created with owner-only permissions), never in the repository.
+> **Keep keys secret.** Don't paste them into issues, screenshots or commits. Keys saved by `CommitGen setup` go in your user config file (created with owner-only permissions), never in the repository.
 
 ## Troubleshooting
 
 | Message | What to do |
 |---|---|
-| `nothing is staged` | Stage files with `git add <file>` or `git add -A`, or run `commitgen -a`. |
+| `nothing is staged` | Stage files with `git add <file>` or `git add -A`, or run `CommitGen -a`. |
 | `this folder is not a git repository` | `cd` into your project, or run `git init`. |
 | `git is not installed or not on your PATH` | Install from [git-scm.com](https://git-scm.com/downloads) and reopen the terminal. |
-| `rate limit or free-tier quota reached` | Add a fallback (`commitgen setup`), lower `max_diff`, wait until the time shown, or use `--offline`. |
-| `the API key was rejected or is missing` | Re-run `commitgen setup <provider>`. `commitgen providers` shows where to get a key. |
+| `rate limit or free-tier quota reached` | Add a fallback (`CommitGen setup`), lower `max_diff`, wait until the time shown, or use `--offline`. |
+| `the API key was rejected or is missing` | Re-run `CommitGen setup <provider>`. `CommitGen providers` shows where to get a key. |
 | `skipping gemini: no API key` | The provider is in your chain but has no key. Set it, or remove it from `fallback`. |
 | `could not connect — is the local model server running?` | Start Ollama (`ollama serve`) or LM Studio's server, or use a hosted provider. |
 | `not found — check base_url and the model name` | Wrong model name. For Ollama: `ollama pull <model>`. For hosted providers, check their model list. |
 | The model describes the diff instead of writing a message | CommitGen retries automatically. Also try staging less at once, adding `-m "..."`, or a larger model. |
-| Settings don't seem to apply | Run `commitgen config show` to see the effective provider chain. On Windows, open a new terminal after `setx`. |
+| Settings don't seem to apply | Run `CommitGen config show` to see the effective provider chain. On Windows, open a new terminal after `setx`. |
 | Old setup with `COMMITGEN_BASE_URL` | Still works: the URL is matched to its provider (Groq, OpenAI, …) or treated as a custom server. |
 
 The git hook never blocks a commit: if generation fails, `git commit` continues as normal. It also skips merges, amends and `-m` commits.
@@ -341,7 +364,7 @@ git diff --cached → skip noise → mask secrets → build prompt → provider 
 <details>
 <summary><b>Does my code leave my machine?</b></summary>
 
-Only if you use a hosted provider, and then only the filtered, secret-masked staged diff goes to that provider. `offline`, `ollama`, `lmstudio` and `llamacpp` keep everything local. Run `commitgen --dry-run` to see exactly what would be sent.
+Only if you use a hosted provider, and then only the filtered, secret-masked staged diff goes to that provider. `offline`, `ollama`, `lmstudio` and `llamacpp` keep everything local. Run `CommitGen --dry-run` to see exactly what would be sent.
 </details>
 
 <details>
@@ -357,7 +380,7 @@ Only if you use a hosted provider, and then only the filtered, secret-masked sta
 <details>
 <summary><b>Can I use it in CI or scripts?</b></summary>
 
-Yes. `commitgen -p` prints the message only. With no key in the environment it uses offline mode, so it never needs network access.
+Yes. `CommitGen -p` prints the message only. With no key in the environment it uses offline mode, so it never needs network access.
 </details>
 
 ## Development
@@ -365,14 +388,18 @@ Yes. `commitgen -p` prints the message only. With no key in the environment it u
 ```bash
 go test ./...
 go vet ./...
-go build -o commitgen .
+go build -o CommitGen .
 ```
 
 ```text
 .
 ├── main.go            CLI entry point and commands
 ├── providers.go       provider resolution, fallback chain, friendly errors
-├── setup.go           `commitgen setup` wizard
+├── setup.go           `CommitGen setup` wizard
+├── completion.go      `CommitGen completion` (embeds the scripts below)
+├── completions/       Bash, Zsh, Fish and PowerShell tab completion
+├── install.sh         installer for macOS / Linux
+├── install.ps1        installer for Windows
 └── internal/
     ├── config/        config files and env vars
     ├── git/           git commands (diff, log, branch)
