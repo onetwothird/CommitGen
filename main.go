@@ -10,16 +10,20 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/onetwothird/CommitGen/internal/cache"
+	"github.com/onetwothird/CommitGen/internal/commitlint"
 	"github.com/onetwothird/CommitGen/internal/config"
 	"github.com/onetwothird/CommitGen/internal/git"
 	"github.com/onetwothird/CommitGen/internal/llm"
 	"github.com/onetwothird/CommitGen/internal/prompt"
 	"github.com/onetwothird/CommitGen/internal/redact"
+	"github.com/onetwothird/CommitGen/internal/refs"
 )
 
 var version = "dev"
@@ -32,10 +36,14 @@ Usage:
   CommitGen providers          list providers, costs and which keys are set
   CommitGen --offline          no AI, no key, no internet: rule-based message
   CommitGen -a --each          commit every changed file separately, automatically
+  CommitGen pr [--create]      write a pull request title and description for this branch
+  CommitGen changelog          release notes from Conventional Commits since the last tag
+  CommitGen reword [N]         rewrite bad messages of unpushed (or the last N) commits
   CommitGen hook install       draft messages automatically on ` + "`git commit`" + `
   CommitGen hook uninstall
   CommitGen config init        write a starter config file
   CommitGen config path|show
+  CommitGen cache clear|path   forget messages saved for diffs you already generated
   CommitGen completion <shell> tab completion for bash, zsh, fish or powershell
   CommitGen version
 
@@ -44,17 +52,23 @@ Examples:
   CommitGen -c -y              generate and commit in one go
   CommitGen -m "fixes #42"     give the model (or offline mode) a hint
   CommitGen --provider gemini  use another provider just this once
+  CommitGen pr --create        open the pull request with the GitHub CLI (gh)
+  CommitGen changelog --release v1.2.0 >> notes.md
 
 Flags:
 `
 
 type flags struct {
 	commit, yes, print, dryRun, noRedact, verbose bool
-	offline                                       bool
+	offline, noCache, allowSecrets                bool
 	each, all                                     bool
 	n                                             int
 	hint, model, url, provider, style, lang, hook string
 	maxDiff                                       int
+
+	// pr, changelog and reword
+	base, from, to, release string
+	create, full, force     bool
 }
 
 func main() {
@@ -71,6 +85,14 @@ func main() {
 			exit(providersCmd())
 		case "completion", "completions":
 			exit(completionCmd(args[1:]))
+		case "pr":
+			exit(prCmd(args[1:]))
+		case "changelog":
+			exit(changelogCmd(args[1:]))
+		case "reword":
+			exit(rewordCmd(args[1:]))
+		case "cache":
+			exit(cacheCmd(args[1:]))
 		case "version":
 			fmt.Println("CommitGen", version)
 			return
@@ -92,7 +114,7 @@ func newFlagSet(f *flags) *flag.FlagSet {
 	fs := flag.NewFlagSet("CommitGen", flag.ExitOnError)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage); fs.PrintDefaults() }
 	fs.BoolVar(&f.commit, "c", false, "commit with the generated message (opens your editor to review)")
-	fs.BoolVar(&f.yes, "y", false, "with -c: commit immediately, skip the editor")
+	fs.BoolVar(&f.yes, "y", false, "with -c: commit immediately, skip the editor; with reword or pr --create: don't ask")
 	fs.BoolVar(&f.print, "p", false, "print the message only (no interactive menu); good for scripts")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "show exactly what would be sent to the model, then exit")
 	fs.BoolVar(&f.noRedact, "no-redact", false, "do not mask secrets in the diff")
@@ -109,7 +131,30 @@ func newFlagSet(f *flags) *flag.FlagSet {
 	fs.BoolVar(&f.each, "each", false, "commit every staged file separately, each with its own message (automatic)")
 	fs.BoolVar(&f.all, "a", false, "stage all changes first (like git add -A)")
 	fs.StringVar(&f.hook, "hook", "", "internal: write message into this file (used by the git hook)")
+	fs.BoolVar(&f.noCache, "no-cache", false, "don't reuse a message generated earlier for the same diff")
+	fs.BoolVar(&f.allowSecrets, "allow-secrets", false, "commit automatically (-c -y, --each) even if the changes contain what looks like a real API key")
+	fs.StringVar(&f.base, "base", "", "pr: branch the pull request goes into (default: origin's default branch)")
+	fs.BoolVar(&f.create, "create", false, "pr: open the pull request with the GitHub CLI (gh)")
+	fs.StringVar(&f.from, "from", "", "changelog: start of the range (default: the latest tag)")
+	fs.StringVar(&f.to, "to", "", "changelog: end of the range (default: HEAD)")
+	fs.StringVar(&f.release, "release", "", "changelog: heading, e.g. v1.2.0 (default: the tag at --to, else Unreleased)")
+	fs.BoolVar(&f.full, "full", false, "changelog: list every commit type; reword: also rewrite messages that already look fine")
+	fs.BoolVar(&f.force, "force", false, "reword: allow rewriting commits that are already pushed")
 	return fs
+}
+
+// parseFlags parses flags that may come before or after positional
+// arguments (Go's flag package stops at the first positional one).
+func parseFlags(args []string) (flags, []string) {
+	var f flags
+	fs := newFlagSet(&f)
+	fs.Parse(args)
+	var pos []string
+	for rest := fs.Args(); len(rest) > 0; rest = fs.Args() {
+		pos = append(pos, rest[0])
+		fs.Parse(rest[1:])
+	}
+	return f, pos
 }
 
 func exit(err error) {
@@ -164,19 +209,37 @@ func loadConfig(f flags) (config.Config, string, error) {
 }
 
 type session struct {
-	cfg     config.Config
-	f       flags
-	p       *llm.Chain
-	targets []target
-	ctx     context.Context
+	cfg      config.Config
+	f        flags
+	p        *llm.Chain
+	targets  []target
+	ctx      context.Context
+	root     string
+	branch   string
+	lint     commitlint.Rules
+	cache    *cache.Cache
+	findings []redact.Finding // possible secrets in the last diff read
 }
 
+// request reads the staged diff and builds the model request for it.
 func (s *session) request() (llm.Request, string, error) {
 	diff, err := git.StagedDiff(s.cfg.Exclude)
 	if err != nil {
 		return llm.Request{}, "", err
 	}
 	stat, _ := git.StagedStat()
+	diff = s.prepare(diff, "the staged changes")
+	if s.f.verbose {
+		fmt.Fprintf(os.Stderr, "CommitGen: providers: %s (%d diff chars)\n", describe(s.targets), len(diff))
+	}
+	return s.buildRequest(diff, stat, ""), stat, nil
+}
+
+// prepare scans a diff for secrets (warning about them) and masks them
+// before anything is sent to a model.
+func (s *session) prepare(diff, what string) string {
+	s.findings = redact.Scan(diff)
+	warnSecrets(s.findings, what)
 	if !s.f.noRedact {
 		var n int
 		diff, n = redact.Secrets(diff)
@@ -184,46 +247,136 @@ func (s *session) request() (llm.Request, string, error) {
 			fmt.Fprintf(os.Stderr, "CommitGen: masked %d possible secret(s) before sending\n", n)
 		}
 	}
+	return diff
+}
+
+func (s *session) buildRequest(diff, stat, original string) llm.Request {
 	in := prompt.Input{
-		Diff: diff, Stat: stat, Branch: git.Branch(), History: git.RecentSubjects(s.cfg.History),
+		Diff: diff, Stat: stat, Branch: s.branch, History: git.RecentSubjects(s.cfg.History),
 		Style: s.cfg.Style, Language: s.cfg.Language, Scopes: s.cfg.Scopes,
 		Instructions: s.cfg.Instructions, Hint: s.f.hint, MaxDiff: s.cfg.MaxDiff,
-	}
-	if s.f.verbose {
-		fmt.Fprintf(os.Stderr, "CommitGen: providers: %s (%d diff chars)\n", describe(s.targets), len(diff))
+		Types: s.lint.Types, MaxHeader: s.lint.HeaderMax, Original: original,
 	}
 	return llm.Request{
 		System: prompt.System(in), User: prompt.User(in),
 		Temperature: s.cfg.Temperature, MaxTokens: 400,
 		Diff: diff, Hint: s.f.hint, Style: s.cfg.Style, Scopes: s.cfg.Scopes,
-	}, stat, nil
+		MaxHeader: s.lint.HeaderMax, NoBreaking: !s.cfg.Breaking,
+	}
 }
 
-func (s *session) generate(req llm.Request, stat string, n int) ([]string, error) {
+// valid reports whether msg is a usable commit message for this repo: the
+// configured style, plus the repo's commitlint rules if it has any.
+func (s *session) valid(msg string) bool {
+	if s.cfg.Style != "simple" && len(s.lint.Types) > 0 {
+		subj, _, _ := strings.Cut(strings.TrimSpace(msg), "\n")
+		re := regexp.MustCompile(`^(` + strings.Join(quoteAll(s.lint.Types), "|") + `)(\([^)\n]+\))?!?: \S`)
+		if !re.MatchString(subj) {
+			return false
+		}
+	} else if !prompt.Valid(msg, s.cfg.Style) {
+		return false
+	}
+	return len(s.lint.Problems(msg)) == 0
+}
+
+func quoteAll(list []string) []string {
+	out := make([]string, len(list))
+	for i, s := range list {
+		out[i] = regexp.QuoteMeta(s)
+	}
+	return out
+}
+
+// generate returns n candidate messages. With n == 1 a message made earlier
+// for the exact same request is reused unless fresh is set.
+func (s *session) generate(req llm.Request, stat string, n int, fresh bool) ([]string, error) {
+	key := ""
+	if n == 1 && s.cache != nil {
+		key = cache.Key("commit-v1", describe(s.targets), req.System, req.User)
+		if msg, ok := s.cache.Get(key); ok && !fresh {
+			warn("reused the message made earlier for this exact diff (no API call).\n" +
+				"  Regenerate, or use --no-cache, for a new one.")
+			return []string{s.finish(msg)}, nil
+		}
+	}
 	msgs, err := generateN(s.ctx, s.p, req, n, s.label())
 	if err != nil {
 		return nil, err
 	}
+	offline := s.p.Used() == "offline"
 	for i, m := range msgs {
-		if prompt.Valid(m, s.cfg.Style) {
+		if s.valid(m) || offline {
 			continue
 		}
 		if s.f.verbose {
-			fmt.Fprintf(os.Stderr, "CommitGen: model reply was not a commit message, asking it to rewrite:\n%s\n", m)
+			fmt.Fprintf(os.Stderr, "CommitGen: model reply was not a valid commit message, asking it to rewrite:\n%s\n", m)
 		}
 		fix := req
 		fix.User = prompt.RepairUser(m, stat, s.cfg.Style)
-		if fixed, err := generateN(s.ctx, s.p, fix, 1, s.label()); err == nil && prompt.Valid(fixed[0], s.cfg.Style) {
+		if p := s.lint.Problems(m); len(p) > 0 {
+			fix.User += "\nAlso fix these problems (the repo's commitlint rules): " + strings.Join(p, "; ") + "."
+		}
+		if fixed, err := generateN(s.ctx, s.p, fix, 1, s.label()); err == nil && s.valid(fixed[0]) {
 			msgs[i] = fixed[0]
-		} else {
+		} else if !prompt.Valid(m, s.cfg.Style) {
 			fmt.Fprintln(os.Stderr, "CommitGen: warning: the model's reply doesn't look like a commit message.\n"+
 				"  Tips: stage fewer files at a time, add context with -m \"...\", or try a larger model (--model).")
 		}
 	}
-	if s.p.Used() == "offline" && len(s.targets) > 1 && s.targets[0].name != "offline" {
+	if offline && len(s.targets) > 1 && s.targets[0].name != "offline" {
 		warn("used the offline generator (no AI) - review the message before committing")
 	}
+	if key != "" && !offline && s.valid(msgs[0]) {
+		s.cache.Put(key, msgs[0])
+	}
+	if p := s.lint.Problems(msgs[0]); len(p) > 0 {
+		warn("the message breaks this repo's commitlint rules (" + s.lint.File + "): " + strings.Join(p, "; "))
+	}
+	for i := range msgs {
+		msgs[i] = s.finish(msgs[i])
+	}
 	return msgs, nil
+}
+
+// finish adds what CommitGen appends to every message: the branch's issue.
+func (s *session) finish(msg string) string {
+	if ref := refs.FromBranch(s.branch); ref != "" && s.cfg.IssueFooter != "" {
+		msg = refs.AddFooter(msg, s.cfg.IssueFooter, ref)
+	}
+	return msg
+}
+
+// warnSecrets tells the user about likely secrets in changes they are about
+// to commit (or have committed). Masking only protects what the model sees.
+func warnSecrets(fs []redact.Finding, what string) {
+	if len(fs) == 0 {
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "warning: %s may contain secrets. They are masked for the AI, but git will store them:\n", what)
+	for i, f := range fs {
+		if i == 5 {
+			fmt.Fprintf(&b, "    ... and %d more\n", len(fs)-5)
+			break
+		}
+		strength := ""
+		if f.Strong {
+			strength = " (known key format)"
+		}
+		fmt.Fprintf(&b, "    %s:%d  %s%s\n", f.File, f.Line, f.Kind, strength)
+	}
+	b.WriteString("  Move them to environment variables or a secret manager, and rotate any real key that was pushed.")
+	warn(b.String())
+}
+
+// secretGuard stops automatic commits that would store a known key format.
+func (s *session) secretGuard(auto bool) error {
+	if !auto || s.f.allowSecrets || !redact.AnyStrong(s.findings) {
+		return nil
+	}
+	return errors.New("not committing: the changes contain what looks like a real API key or private key (see above).\n" +
+		"  Remove it, or pass --allow-secrets if it is a fake key used in tests")
 }
 
 // label is what the spinner shows: the provider currently in use.
@@ -241,16 +394,32 @@ func (s *session) label() string {
 }
 
 func newSession(f flags) (*session, context.CancelFunc, error) {
-	cfg, _, err := loadConfig(f)
+	cfg, root, err := loadConfig(f)
 	if err != nil {
 		return nil, nil, err
+	}
+	lint, _ := commitlint.Load(root)
+	if lint.Found() {
+		if len(cfg.Scopes) == 0 {
+			cfg.Scopes = lint.Scopes
+		}
+		if f.verbose {
+			fmt.Fprintf(os.Stderr, "CommitGen: using commitlint rules from %s\n", lint.File)
+		}
 	}
 	chain, targets, err := buildChain(cfg, f.verbose)
 	if err != nil {
 		return nil, nil, err
 	}
+	var c *cache.Cache
+	if cfg.Cache && !f.noCache {
+		c = cache.Default()
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	return &session{cfg: cfg, f: f, p: chain, targets: targets, ctx: ctx}, cancel, nil
+	return &session{
+		cfg: cfg, f: f, p: chain, targets: targets, ctx: ctx,
+		root: root, branch: git.Branch(), lint: lint, cache: c,
+	}, cancel, nil
 }
 
 // firstRunTip tells new users with nothing configured that they're getting
@@ -301,21 +470,25 @@ func generateCmd(f flags) error {
 		return nil
 	}
 
-	gen := func(n int) ([]string, error) { return s.generate(req, stat, n) }
+	gen := func(n int, fresh bool) ([]string, error) { return s.generate(req, stat, n, fresh) }
 
 	if f.hook != "" {
-		msgs, err := gen(1)
+		msgs, err := gen(1, false)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "CommitGen: skipped —", err)
 			return nil
 		}
 		existing, _ := os.ReadFile(f.hook)
-		return os.WriteFile(f.hook, []byte(msgs[0]+"\n"+string(existing)), 0o644)
+		return os.WriteFile(f.hook, []byte(msgs[0]+"\n"+secretComments(s.findings)+string(existing)), 0o644)
+	}
+	if err := s.secretGuard(f.commit && f.yes); err != nil {
+		return err
 	}
 
 	interactive := isTTY(os.Stdin) && isTTY(os.Stdout) && !f.print && !f.commit
+	fresh := false
 	for {
-		msgs, err := gen(max(1, f.n))
+		msgs, err := gen(max(1, f.n), fresh)
 		if err != nil {
 			return err
 		}
@@ -342,6 +515,7 @@ func generateCmd(f flags) error {
 		case "e":
 			return commit(msg, true)
 		case "r":
+			fresh = true
 			continue
 		default:
 			return nil
@@ -598,9 +772,12 @@ func eachCmd(s *session) error {
 			return err
 		}
 		req, stat, err := s.request()
+		if err == nil && !preview {
+			err = s.secretGuard(true)
+		}
 		if err == nil {
 			var msgs []string
-			msgs, err = s.generate(req, stat, 1)
+			msgs, err = s.generate(req, stat, 1, false)
 			if err == nil {
 				fmt.Printf("\n[%d/%d] %s\n%s\n", i+1, len(files), file, indent(msgs[0]))
 				if !preview {
@@ -616,11 +793,30 @@ func eachCmd(s *session) error {
 	}
 	git.RefreshIndex()
 	if preview {
-		fmt.Fprintf(os.Stderr, "\ncommitgen: preview only, nothing was committed\n")
+		fmt.Fprintf(os.Stderr, "\nCommitGen: preview only, nothing was committed\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\ncommitgen: created %d commit(s)\n", done)
+		fmt.Fprintf(os.Stderr, "\nCommitGen: created %d commit(s)\n", done)
 	}
 	return nil
+}
+
+// secretComments turns findings into "# ..." lines for the commit message
+// editor. Git drops comment lines, so they never end up in the commit.
+func secretComments(fs []redact.Finding) string {
+	if len(fs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("# CommitGen warning: these staged lines may contain secrets that git will store:\n")
+	for i, f := range fs {
+		if i == 5 {
+			fmt.Fprintf(&b, "#   ... and %d more\n", len(fs)-5)
+			break
+		}
+		fmt.Fprintf(&b, "#   %s:%d  %s\n", f.File, f.Line, f.Kind)
+	}
+	b.WriteString("# Abort with an empty message if you didn't mean to commit them.\n")
+	return b.String()
 }
 
 func commitQuiet(msg string) error {
