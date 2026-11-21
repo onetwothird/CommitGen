@@ -38,6 +38,9 @@ func keyFor(c config.Config, p llm.Preset, main bool) string {
 }
 
 func modelFor(c config.Config, p llm.Preset, main bool) string {
+	if p.Kind == llm.KindOffline {
+		return ""
+	}
 	if main && c.Model != "" {
 		return c.Model
 	}
@@ -258,10 +261,12 @@ func providersCmd() error {
 	fmt.Println("Providers (use with `commitgen setup <name>` or `provider = \"<name>\"`):")
 	fmt.Println()
 	fmt.Printf("  %-11s %-28s %-24s %s\n", "NAME", "COST", "DEFAULT MODEL", "STATUS")
+	main := mainProvider(cfg)
 	for _, p := range llm.Presets {
 		status := "ready"
 		if p.NeedsKey() {
-			if keyFor(cfg, p, false) == "" {
+			// The main provider may use api_key / COMMITGEN_API_KEY.
+			if keyFor(cfg, p, p.Name == main) == "" {
 				status = "needs key: " + p.KeyEnv[0]
 			} else {
 				status = "key found"

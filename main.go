@@ -541,8 +541,8 @@ func configCmd(args []string) error {
 			note = " (not created yet - run `commitgen setup`)"
 		}
 		targets, skipped := resolve(c)
-		fmt.Printf("config file: %s%s\nprovider:    %s\nwill try:    %s\nstyle:       %s\nlanguage:    %s\nmax_diff:    %d\nhistory:     %d\ntimeout:     %ds\n",
-			path, note, c.Provider, describe(targets), c.Style, c.Language, c.MaxDiff, c.History, c.Timeout)
+		fmt.Printf("config file: %s%s\nprovider:    %s\nwill try:    %s\nstyle:       %s\nlanguage:    %s\nmax_diff:    %d\nhistory:     %d\ntimeout:     %ds\nmax_wait:    %ds\n",
+			path, note, c.Provider, describe(targets), c.Style, c.Language, c.MaxDiff, c.History, c.Timeout, c.MaxWait)
 		for _, sk := range skipped {
 			fmt.Println("skipped:    ", sk)
 		}
