@@ -47,6 +47,24 @@ Tests must not depend on your machine: no real API keys, network calls or locall
 - Error messages should say what went wrong **and what to do next**.
 - Never log or print API keys.
 
+## Releasing
+
+1. Move the `[Unreleased]` notes in `CHANGELOG.md` under the new version. `CommitGen changelog --release v0.2.0` drafts them.
+2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`. The `release` workflow builds every platform and publishes the GitHub release.
+3. Package managers are updated only when their token secret exists (Settings → Secrets and variables → Actions):
+
+   | Secret | Needs |
+   |---|---|
+   | `SCOOP_BUCKET_TOKEN` | A public repo `onetwothird/scoop-bucket`, and a token that can push to it |
+   | `HOMEBREW_TAP_TOKEN` | A public repo `onetwothird/homebrew-tap`, and a token that can push to it |
+   | `WINGET_TOKEN` | A fork `onetwothird/winget-pkgs` of `microsoft/winget-pkgs`, and a token that can push to it and open pull requests |
+
+   Use fine-grained tokens limited to those repositories.
+
+## Security
+
+Please report vulnerabilities privately, not in issues. See [SECURITY.md](SECURITY.md).
+
 ## Code of conduct
 
-Be kind and assume good intent. Harassment or discrimination of any kind isn't tolerated.
+Be kind and assume good intent. Everyone taking part in this project is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
