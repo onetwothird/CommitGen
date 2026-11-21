@@ -16,8 +16,8 @@ labels: bug
 
 **Environment**
 
-- `commitgen version`:
+- `CommitGen version`:
 - OS:
-- Provider (`commitgen config show`, it never prints keys):
+- Provider (`CommitGen config show`, it never prints keys):
 
 **Anything else**
