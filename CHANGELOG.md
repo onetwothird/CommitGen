@@ -10,17 +10,19 @@ All notable changes to this project are documented here. The format follows [Kee
 - **Provider presets**: `gemini`, `groq`, `openrouter`, `cerebras`, `mistral`, `github`, `ollama`, `lmstudio`, `llamacpp`, `openai`, `anthropic`. Each has a default model and its own API key env var.
 - **Fallback chain** (`fallback = [...]`, `COMMITGEN_FALLBACK`): when a provider hits a rate limit, a quota, a bad key or a network error, the next one is tried, ending with offline mode.
 - **`provider = "auto"`** (new default): uses every provider whose key is present, then a running Ollama with an installed model, then offline mode.
-- **`commitgen setup`**: guided setup that picks a provider, saves the key, tests the connection and sets fallbacks.
-- **`commitgen providers`**: lists providers, cost and which keys are set.
+- **`CommitGen setup`**: guided setup that picks a provider, saves the key, tests the connection and sets fallbacks.
+- **`CommitGen providers`**: lists providers, cost and which keys are set.
 - Per-provider `<name>_api_key` and `<name>_model` config keys.
 - Smarter rate-limit handling: wait out short limits (`max_wait`, default 30 s) when only offline mode is left, pause a limited provider until it resets instead of dropping it for the whole run, and read the exact wait from messages like "Please try again in 7.5s".
 - Install scripts for macOS/Linux (`install.sh`) and Windows (`install.ps1`).
+- Tab completion for Bash, Zsh, Fish and PowerShell: `CommitGen completion <shell>` (commands, flags, providers, styles and languages). CI checks each script, and tests keep them in sync with the real flags.
 - `CONTRIBUTING.md`, issue and pull request templates.
 
 ### Changed
 
+- The tool is now called **CommitGen** everywhere: the binary, help text, messages, release archives and config paths (`CommitGen/config.toml`, `.CommitGen.toml`). Existing lowercase config files and git hooks keep working.
 - Clearer errors for rate limits (including the retry time), rejected keys, unknown models, unreachable servers, "nothing staged", "not a git repository" and missing git.
-- `commitgen config show` now prints the provider chain that will be used.
+- `CommitGen config show` now prints the provider chain that will be used.
 - Default timeout lowered from 120 s to 60 s.
 - Default Ollama model is `qwen2.5-coder:1.5b`, which runs on about 4 GB of RAM.
 - Gemini models get the same reasoning budget handling as `gpt-oss`.
