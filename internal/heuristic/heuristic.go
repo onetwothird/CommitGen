@@ -22,7 +22,7 @@ type File struct {
 	Status         Status
 	Added, Removed int
 	Binary         bool
-	NewSymbols     []string 
+	NewSymbols     []string
 	addedText      []string
 	removedText    []string
 }
@@ -193,7 +193,6 @@ type Options struct {
 	Scopes []string // allowed scopes; empty = any
 	Hint   string   // user's -m text; used as the summary when given
 }
-
 
 func Generate(diff string, o Options) string {
 	files := Parse(diff)
