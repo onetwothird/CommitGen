@@ -18,3 +18,19 @@ jobs:
       - name: gofmt
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: completion scripts (bash, fish)
+        if: runner.os == 'Linux'
+        run: |
+          bash -n completions/CommitGen.bash
+          sudo apt-get update -qq && sudo apt-get install -y -qq fish >/dev/null
+          fish --no-execute completions/CommitGen.fish
+      - name: completion script (zsh)
+        if: runner.os == 'macOS'
+        run: zsh -n completions/_CommitGen
+      - name: completion script (powershell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null; $errs = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/completions/CommitGen.ps1", [ref]$tokens, [ref]$errs)
+          if ($errs) { $errs; exit 1 }
