@@ -27,7 +27,7 @@ type Preset struct {
 	KeyURL  string   // where to get a key
 	Local   bool     // runs on this machine
 	Free    string   // short note about cost
-	Notes   string   // one-line description for `commitgen providers`
+	Notes   string   // one-line description for `CommitGen providers`
 }
 
 // NeedsKey reports whether the preset requires an API key.
